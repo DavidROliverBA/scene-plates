@@ -9,7 +9,7 @@ import { VIEWS, type Spec, type View } from './spec';
 import type { ThemeName } from './tokens';
 import { compile } from './scene';
 import { renderFrame } from './render';
-import { validate } from './validate';
+import { sharedPaths, validate } from './validate';
 import { hasIcon, iconSource, registerIcons } from './icons';
 import { existsSync } from 'node:fs';
 
@@ -41,13 +41,26 @@ async function load(path: string): Promise<Spec> {
   return spec!;
 }
 function fail(msg: string): never { console.error(msg); process.exit(1); }
-const usage = () => fail('Usage:\n  scene-plates check <spec.json>...\n  scene-plates svg <spec.json> [--step N | --all] [--theme light|dark] [--view 3d|iso|flat] [-o file-or-folder]\n  scene-plates html <spec.json>... -o deck.html [--no-toggle]\nAny command: --icons pack.json');
+const usage = () => fail('Usage:\n  scene-plates check <spec.json>...\n  scene-plates routes <spec.json>      (how each line was routed, and why)\n  scene-plates svg <spec.json> [--step N | --all] [--theme light|dark] [--view 3d|iso|flat] [-o file-or-folder]\n  scene-plates html <spec.json>... -o deck.html [--no-toggle]\nAny command: --icons pack.json');
 
 if (!cmd || !files.length) usage();
 if (flags.icons) registerIcons(await Bun.file(flags.icons as string).json());
 
 if (cmd === 'check') {
   for (const p of files) { const s = await load(p); console.log(`ok  ${p}  (${s.nodes.length} nodes, ${(s.steps ?? []).length || 1} steps, ${view ?? s.view ?? '3d'})`); }
+} else if (cmd === 'routes') {
+  // How each line was routed, in words: the shape, where it turns, and what it shares a path with.
+  const spec = await load(files[0]), { model } = compile(spec, view), shared = sharedPaths(model);
+  const n = (v: number) => String(Math.round(v * 100) / 100);
+  const why = { straight: 'the two boxes line up', L: 'one bend: up or down, then across', Z: 'two bends: turns in the gap between them', U: 'goes round: out and back through a gap', riser: 'between layers' };
+  const count: Record<string, number> = {};
+  for (const e of model.edges) {
+    count[e.shape] = (count[e.shape] ?? 0) + 1;
+    const turns = e.pts.slice(1, -1).map((p) => `(${n(p[0])}, ${n(p[1])})`).join(' ');
+    const extra = [e.spec.via ? `via ${e.spec.via}` : '', e.spec.channel !== undefined ? `channel ${e.spec.channel}` : '', e.spec.offset ? `offset ${e.spec.offset}` : ''].filter(Boolean).join(', ');
+    console.log(`${e.id.padEnd(24)} ${e.shape.padEnd(9)} ${why[e.shape]}${turns ? `; turns at ${turns}` : ''}${extra ? `  [${extra}]` : ''}${shared.get(e.id) ? `\n${' '.repeat(35)}shares a stretch or junction with: ${shared.get(e.id)!.join(', ')}` : ''}`);
+  }
+  console.log(`\n${model.edges.length} lines: ` + Object.entries(count).map(([k, v]) => `${v} ${k}`).join(', ') + '. No two cross; the checker refuses a spec where any do.');
 } else if (cmd === 'svg') {
   const spec = await load(files[0]), scene = compile(spec, view);
   const theme = (flags.theme as ThemeName) ?? 'light';

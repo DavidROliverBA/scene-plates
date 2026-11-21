@@ -29,6 +29,7 @@ export const tokens = {
   layerGap: 2.4, // vertical distance between layers
   bandGap: 1.3, // gap between layers when the scene is drawn flat
   arrow: { length: 0.24, half: 0.1 },
+  junction: 0.055, // radius of the dot where lines branch or join, in grid units
   icon: { size: 0.46, inset: 0.15, gap: 0.1, stroke: 1.7 }, // icon square on a node's top face
   riserLabel: 0.42, // how far above the lower node a between-layers label sits
 

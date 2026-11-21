@@ -139,11 +139,12 @@ export function validate(spec: Spec, view?: View): string[] {
   // Every box must be large enough to read at some point: either the whole scene
   // fits at a readable size, or some step moves the camera in on it.
   const F0 = T.frame, read = new Set<string>();
+  const roof0 = scene.showTitle && spec.title ? (spec.subtitle ? T.title.bandSub : T.title.band) + 6 : 30; // not hidden under the title
   for (const st of scene.states) {
     const P = projector(scene, st.cam);
     for (const n of model.nodes) {
       const c: [number, number, number] = [(n.box.x0 + n.box.x1) / 2, (n.box.y0 + n.box.y1) / 2, n.box.z1], [x, y] = P(c);
-      if (st.visible.has(n.id) && x > 30 && x < F0.w - 30 && y > 30 && y < F0.h - F0.captionBand + 20 && P.scaleAt(c) >= T.minScale - 0.5) read.add(n.id);
+      if (st.visible.has(n.id) && x > 30 && x < F0.w - 30 && y > roof0 && y < F0.h - F0.captionBand + 10 && P.scaleAt(c) >= T.minScale - 0.5) read.add(n.id);
     }
   }
   const unread = model.nodes.filter((n) => !read.has(n.id));
@@ -274,4 +275,14 @@ export function validate(spec: Spec, view?: View): string[] {
     if (never.length) bad(`Never shown in any step: ${never.map((n) => n.id).join(', ')}. Show them or remove them.`);
   }
   return errs;
+}
+
+// For each line, the other lines it deliberately shares a stretch or a junction with.
+export function sharedPaths(model: { edges: LEdge[] }): Map<string, string[]> {
+  const out = new Map<string, string[]>(), flat = model.edges.filter((e) => !e.riser && !e.problem);
+  for (const a of flat) for (const b of flat) {
+    if (a === b || a.plane !== b.plane) continue;
+    if (segs(a).some((s) => segs(b).some((t) => meet(s, t) === 'touch'))) out.set(a.id, [...(out.get(a.id) ?? []), b.id]);
+  }
+  return out;
 }

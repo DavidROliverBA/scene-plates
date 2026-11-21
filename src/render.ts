@@ -238,6 +238,13 @@ export function renderFrame(scene: Scene, o: FrameOpts = {}): string {
   for (const plane of model.planes) {
     model.groups.filter((g) => g.plane === plane).sort((x, y) => y.depth - x.depth || far(y.box) - far(x.box)).forEach(drawGroup);
     model.edges.filter((x) => x.plane === plane && !x.riser).forEach(drawEdge);
+    for (const q of model.junctions.filter((x) => x.plane === plane)) {
+      const a = Math.min(...q.edges.map((id) => lerp(a0.edge(id), a1.edge(id), e))) * lineAlpha;
+      if (a < 0.05) continue;
+      const [x, y] = P(q.at), ed = model.edges.find((x) => x.id === q.edges[0])!;
+      const col = th.kind[ed.kind === 'flow' ? 'process' : ed.kind === 'pass' ? 'success' : ed.kind];
+      out.push(`<circle cx="${f(x)}" cy="${f(y)}" r="${f(clamp(S * L.k(q.at) * T.junction, 2, 5))}" fill="${col}" opacity="${a.toFixed(2)}"/>`);
+    }
     model.edges.filter((x) => x.plane === plane && x.riser).forEach(drawEdge);
     model.nodes.filter((n) => n.plane === plane).sort((x, y) => far(y.box) - far(x.box)).forEach(drawNode);
   }
@@ -295,7 +302,7 @@ export function renderMorph(a: Scene, b: Scene, t: number, o: FrameOpts = {}): s
   const between: Scene = {
     ...a,
     model: {
-      ...ref.model, flat: false, ...(sameLayout ? {} : { edges: [], callouts: [] }),
+      ...ref.model, flat: false, ...(sameLayout ? {} : { edges: [], callouts: [], junctions: [] }),
       nodes: ref.model.nodes.map((n) => ({ ...n, box: lerpBox(a.model.byId.get(n.id)!.box, b.model.byId.get(n.id)!.box, m) })),
       groups: ref.model.groups.map((g) => ({ ...g, box: lerpBox(a.model.groups.find((x) => x.id === g.id)!.box, b.model.groups.find((x) => x.id === g.id)!.box, m) })),
     },

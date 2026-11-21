@@ -279,3 +279,24 @@ test('a callout near the edge slides to stay inside the frame', () => {
   expect(Number(m[1]) + Number(m[2])).toBeLessThanOrEqual(1280 - 14 + 0.1);
   expect(anchor + Number(m[2]) / 2).toBeGreaterThan(1280 - 14); // it would have overflowed if centred
 });
+
+// --- line routing ------------------------------------------------------------
+test('each line gets one of four shapes, and joins are marked', async () => {
+  const { model } = compile(await load('11-aws-routing.json'));
+  const shape = (id: string) => model.edges.find((e) => e.id === id)!.shape;
+  expect(shape('users>cdn')).toBe('straight');
+  expect(shape('dns>cdn')).toBe('L');
+  expect(shape('waf>site')).toBe('Z');
+  expect(shape('fn>bus')).toBe('U');
+  expect(model.edges.length).toBe(29);
+  // the three lines out of the firewall branch at one marked point
+  expect(model.junctions.some((j) => Math.abs(j.at[0] - 11.3) < 0.01 && Math.abs(j.at[1] - 6.1) < 0.01)).toBe(true);
+  expect(renderFrame(compile(await load('11-aws-routing.json')))).toContain('<circle');
+});
+test('lines a design might want are refused when they would cross or tangle', async () => {
+  const spec = await load('11-aws-routing.json');
+  const withEdge = (e: any) => validate({ ...spec, edges: [...spec.edges!, e] });
+  expect(has(withEdge({ from: 'fn', to: 'cache', channel: 19.6 }), '"fn>bus" and "fn>cache" cross')).toBe(true);
+  expect(has(withEdge({ from: 'flow', to: 'table', channel: 19.6 }), 'run along each other or meet')).toBe(true);
+  expect(has(withEdge({ from: 'sns', to: 'queue', via: 'yx' }), 'runs through node')).toBe(true);
+});

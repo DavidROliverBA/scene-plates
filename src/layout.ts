@@ -13,10 +13,17 @@ export interface EdgeLabel { at: Vec3; anchor: 'start' | 'middle' | 'end'; rect:
 export interface LEdge {
   id: string; spec: EdgeSpec; kind: EdgeKind; riser: boolean; layer: number; plane: number;
   pts: Vec3[]; label?: EdgeLabel; problem?: string;
+  shape: RouteShape;
 }
+// straight: one segment. L: one bend. Z: two bends, in one side and out the
+// opposite. U: two bends, out and back the same way round an obstacle. riser: between layers.
+export type RouteShape = 'straight' | 'L' | 'Z' | 'U' | 'riser';
 export interface LCallout { id: string; spec: CalloutSpec; anchor: Vec3; side: 'up' | 'down' | 'left' | 'right' }
+// Where one line branches off, or joins, another: drawn as a dot so a join is never mistaken for a crossing.
+export interface LJunction { at: Vec3; plane: number; edges: [string, string] }
 export interface Model {
   callouts: LCallout[];
+  junctions: LJunction[];
   nodes: LNode[]; byId: Map<string, LNode>; groups: LGroup[]; edges: LEdge[];
   bounds: Box; planes: number[]; flat: boolean; view: View;
 }
@@ -90,6 +97,13 @@ function routePlan(a: Box, b: Box, e: EdgeSpec): { pts: P2[]; problem?: string }
   }
   if (shareX || shareY) return { pts: [[acx, acy], [bcx, bcy]], problem: 'via "yx" needs the nodes on different rows and columns' };
   return { pts: [[acx + off, ay], [acx + off, bcy + off], [bxIn, bcy + off]] };
+}
+
+function shapeOf(pts: P2[]): RouteShape {
+  if (pts.length <= 2) return 'straight';
+  if (pts.length === 3) return 'L';
+  const n = pts.length, first = [pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]], last = [pts[n - 1][0] - pts[n - 2][0], pts[n - 1][1] - pts[n - 2][1]];
+  return first[0] * last[0] + first[1] * last[1] > 0 ? 'Z' : 'U';
 }
 
 function planLabel(pts: P2[], z: number, e: EdgeSpec): EdgeLabel | undefined {
@@ -186,7 +200,7 @@ export function buildModel(spec: Spec, view: View = spec.view ?? '3d'): Model {
       const pts: Vec3[] = [[x, y, up ? a.box.z1 : a.box.z0], [x, y, up ? b.box.z0 : b.box.z1]];
       const top = Math.max(a.layer, b.layer);
       edges.push({
-        ...base, riser: true, layer: top, plane: top, pts,
+        ...base, riser: true, shape: 'riser', layer: top, plane: top, pts,
         // Just above the lower node, clear of the upper layer's plate and its name.
         label: e.label ? { at: [x, y, Math.min(pts[0][2], pts[1][2]) + T.riserLabel], anchor: e.flip ? 'start' : 'end', rect: null } : undefined,
         problem: ok ? undefined : 'nodes on different layers must sit one above the other to be joined',
@@ -201,7 +215,7 @@ export function buildModel(spec: Spec, view: View = spec.view ?? '3d'): Model {
     const channel = e.channel !== undefined && via === 'y' ? e.channel + (shifts.get(a.layer) ?? 0) : e.channel;
     const r = routePlan(a.box, b.box, { ...e, via, channel });
     edges.push({
-      ...base, riser: false, layer: a.layer, plane: flat ? 0 : a.layer, pts: r.pts.map(([x, y]) => [x, y, z] as Vec3),
+      ...base, riser: false, shape: shapeOf(r.pts), layer: a.layer, plane: flat ? 0 : a.layer, pts: r.pts.map(([x, y]) => [x, y, z] as Vec3),
       label: planLabel(r.pts, z, e), problem: r.problem,
     });
   }
@@ -222,5 +236,19 @@ export function buildModel(spec: Spec, view: View = spec.view ?? '3d'): Model {
     const anchor: Vec3 = side === 'up' ? [cx, b.y0, b.z1] : side === 'down' ? [cx, b.y1, b.z0] : side === 'left' ? [b.x0, cy, b.z1] : [b.x1, cy, b.z1];
     callouts.push({ id: c.id, spec: c, anchor, side });
   }
-  return { nodes, byId, groups, edges, bounds, planes, flat, view, callouts };
+  const junctions: LJunction[] = [];
+  const flatEdges = edges.filter((e) => !e.riser && !e.problem), near = (p: number, q: number) => Math.abs(p - q) < 0.02;
+  for (let i = 0; i < flatEdges.length; i++) for (let j = 0; j < flatEdges.length; j++) {
+    const [a, b] = [flatEdges[i], flatEdges[j]];
+    if (i === j || a.plane !== b.plane) continue;
+    // An end or a bend of line a that lands part-way along a segment of line b.
+    for (const p of a.pts) for (let k = 0; k < b.pts.length - 1; k++) {
+      const [s, t] = [b.pts[k], b.pts[k + 1]];
+      const along = near(s[1], t[1]) && near(p[1], s[1]) && p[0] > Math.min(s[0], t[0]) + 0.03 && p[0] < Math.max(s[0], t[0]) - 0.03;
+      const up = near(s[0], t[0]) && near(p[0], s[0]) && p[1] > Math.min(s[1], t[1]) + 0.03 && p[1] < Math.max(s[1], t[1]) - 0.03;
+      const atBox = [a.spec.from, a.spec.to].some((id) => { const n = byId.get(id)!.box; return p[0] > n.x0 - 0.02 && p[0] < n.x1 + 0.02 && p[1] > n.y0 - 0.02 && p[1] < n.y1 + 0.02; });
+      if ((along || up) && !atBox && !junctions.some((q) => near(q.at[0], p[0]) && near(q.at[1], p[1]) && q.plane === a.plane)) junctions.push({ at: p, plane: a.plane, edges: [a.id, b.id] });
+    }
+  }
+  return { nodes, byId, groups, edges, bounds, planes, flat, view, callouts, junctions };
 }

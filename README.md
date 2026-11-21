@@ -45,6 +45,7 @@ open deck.html                                      # arrows, space or click
 | `05-aws-events-flat`, `06-aws-events-iso`, `07-aws-events-3d` | the same scene in each of the three views |
 | `08-request-flow`, `09-agent-loop` | two layers with a fail path; a loop with a cap |
 | `10-platform-50` | fifty components in thirteen areas, shown whole and then as a guided tour |
+| `11-aws-routing` | 27 popular AWS services and 29 lines; each step shows one routing rule |
 
 ## Three views from one spec
 
@@ -92,6 +93,48 @@ says so. What works is a map followed by a tour:
 draws in under a millisecond a frame. What made it tractable was layout
 discipline: one area per row segment, lines only between neighbours, and the
 few long lines routed along the gaps between rows.
+
+## How lines are routed
+
+There is no automatic path-finder. Each line takes one of four simple shapes,
+the author nudges it with three settings, and the checker refuses any spec
+where lines cross or tangle. `11-aws-routing` walks through the rules.
+
+**The four shapes**
+
+| Shape | When | Path |
+|---|---|---|
+| straight | the two boxes line up in a row or column | one segment between the facing sides |
+| Z | they are in different rows and columns | out of the facing side, a turn in the gap between them, into the facing side |
+| L | `"via": "xy"` or `"yx"` | one bend: across then down, or down then across |
+| U | same row or column with a box in the way, and `via` set | out into the gap between rows, along, and back in |
+
+**The three settings**
+
+- `via` picks which side a line leaves by.
+- `channel` picks the exact column or row where it turns. Two unrelated lines
+  turning in the same gap get different channels, a little apart.
+- `offset` shifts a line sideways, so a there-and-back pair runs side by side.
+
+**What the checker refuses**
+
+- two lines crossing;
+- a line running through a box, including its own;
+- two unrelated lines running along each other or meeting part-way;
+- a label sitting on a box, a line or another label.
+
+**What it allows**
+
+- Lines that share a box may share a stretch: several leaving one box share
+  a stem and branch, several arriving at one box join. Each branch or join is
+  marked with a dot.
+
+When a line cannot be drawn without crossing, the answer is to reorder the
+boxes, pick which line matters more, or state the link in words. Services
+that everything uses, such as logging and access control, get no lines at all.
+
+`bun src/cli.ts routes spec.json` prints the shape of every line, where it
+turns, and which lines it shares a stretch with.
 
 ## Icons, cylinders, titles and callouts
 
@@ -186,6 +229,7 @@ its own slide. It follows the system light or dark setting unless you set
 ## Other outputs
 
 ```sh
+bun src/cli.ts routes spec.json                      # how each line was routed
 bun src/cli.ts svg spec.json --all -o out/           # one still per step
 bun src/cli.ts svg spec.json --step 3 --theme dark   # one still to stdout
 bun src/cli.ts check spec.json --view iso            # would it also work in isometric?
@@ -204,7 +248,7 @@ bun scripts/gif.ts spec.json out.gif                 # needs rsvg-convert and ff
 | `src/validate.ts` | the checker |
 | `src/render.ts` | one frame as an SVG string |
 | `src/mount.ts` | the browser runtime and `<scene-plate>` |
-| `src/cli.ts` | `check`, `svg`, `html` |
+| `src/cli.ts` | `check`, `routes`, `svg`, `html` |
 
 `bun test` runs the checks. `bun run build` rebuilds `dist/` and the example deck.
 

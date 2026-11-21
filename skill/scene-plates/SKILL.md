@@ -89,6 +89,16 @@ can only be joined when one sits above the other. `"flip": true` moves a label
 to the other side of its line. `"hold": true` keeps an edge hidden until a
 step shows it by id.
 
+**Routing is not automatic.** A line is straight when its boxes line up,
+otherwise a Z that turns half-way across the gap. You steer it; the checker
+refuses crossings, lines through boxes, and unrelated lines that touch. So:
+place boxes in the order work flows; give two unrelated lines turning in the
+same gap different `channel` values (0.3 apart); lines sharing a box may share
+a stem. If a line cannot avoid crossing, reorder boxes, drop the lesser line,
+or say it in a callout. Never draw lines to services everything uses (logs,
+access control, keys); group them on a plate labelled as such. Run
+`sp routes x.json` to see every line's shape and turning points.
+
 **Groups** draw a plate under their nodes. All nodes of a group are on one
 layer. A group may contain other groups, so plates nest: a VPC plate holding a
 public-subnet plate and a private-subnet plate. Leave 2 between nodes whose
