@@ -2,20 +2,21 @@
 // Pure and deterministic; no camera here.
 
 import { tokens as T } from './tokens';
-import type { EdgeKind, EdgeSpec, GroupSpec, NodeKind, NodeSpec, Spec } from './spec';
+import type { EdgeKind, EdgeSpec, GroupSpec, NodeKind, NodeSpec, Spec, View } from './spec';
 
 export type Vec3 = [number, number, number];
 export interface Box { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number }
-export interface LNode { id: string; spec: NodeSpec; kind: NodeKind; layer: number; box: Box }
-export interface LGroup { id: string; spec: GroupSpec; layer: number; box: Box; nodes: string[] }
+// "plane" is what gets drawn and checked together: the layer in the 3D view, one shared plane when flat.
+export interface LNode { id: string; spec: NodeSpec; kind: NodeKind; layer: number; plane: number; box: Box }
+export interface LGroup { id: string; spec: GroupSpec; layer: number; plane: number; box: Box; nodes: string[]; groups: string[]; depth: number }
 export interface EdgeLabel { at: Vec3; anchor: 'start' | 'middle' | 'end'; rect: [number, number, number, number] | null }
 export interface LEdge {
-  id: string; spec: EdgeSpec; kind: EdgeKind; riser: boolean; layer: number;
+  id: string; spec: EdgeSpec; kind: EdgeKind; riser: boolean; layer: number; plane: number;
   pts: Vec3[]; label?: EdgeLabel; problem?: string;
 }
 export interface Model {
   nodes: LNode[]; byId: Map<string, LNode>; groups: LGroup[]; edges: LEdge[];
-  bounds: Box; layers: number[];
+  bounds: Box; planes: number[]; flat: boolean;
 }
 
 export const edgeId = (e: EdgeSpec) => e.id ?? `${e.from}>${e.to}`;
@@ -101,25 +102,61 @@ function planLabel(pts: P2[], z: number, e: EdgeSpec): EdgeLabel | undefined {
     : { at: [mx + 0.13, base, z], anchor: 'start', rect: [mx + 0.13, base - size, mx + 0.13 + w, base] };
 }
 
-export function buildModel(spec: Spec): Model {
+export function buildModel(spec: Spec, view: View = spec.view ?? 'iso'): Model {
+  const flat = view === 'flat';
   const nodes: LNode[] = spec.nodes.map((n) => ({
-    id: n.id, spec: n, kind: n.kind ?? 'process', layer: n.layer ?? 0, box: nodeBox(n),
+    id: n.id, spec: n, kind: n.kind ?? 'process', layer: n.layer ?? 0, plane: flat ? 0 : n.layer ?? 0, box: nodeBox(n),
   }));
   const byId = new Map(nodes.map((n) => [n.id, n]));
 
-  const groups: LGroup[] = [];
-  for (const g of spec.groups ?? []) {
-    const inside = g.contains.map((id) => byId.get(id)).filter((n): n is LNode => !!n);
-    if (!inside.length) continue;
-    const layer = inside[0].layer, z = layer * T.layerGap, pad = T.platePad;
-    groups.push({
-      id: g.id, spec: g, layer, nodes: inside.map((n) => n.id),
-      box: {
-        x0: Math.min(...inside.map((n) => n.box.x0)) - pad.side, x1: Math.max(...inside.map((n) => n.box.x1)) + pad.side,
-        y0: Math.min(...inside.map((n) => n.box.y0)) - pad.back, y1: Math.max(...inside.map((n) => n.box.y1)) + pad.front,
-        z0: z - T.plate, z1: z,
-      },
-    });
+  // Plates. A group may contain other groups; the outer plate sits just below the inner one.
+  const gspec = new Map((spec.groups ?? []).map((g) => [g.id, g]));
+  const done = new Map<string, LGroup | null>();
+  const resolve = (id: string, trail: Set<string>): LGroup | null => {
+    if (done.has(id)) return done.get(id)!;
+    const g = gspec.get(id);
+    if (!g || trail.has(id)) return null;
+    trail.add(id);
+    const boxes: Box[] = [], ns: string[] = [], gs: string[] = [];
+    let depth = 0, layer = -1;
+    for (const c of g.contains ?? []) {
+      const n = byId.get(c);
+      if (n) { boxes.push(n.box); ns.push(n.id); if (layer < 0) layer = n.layer; continue; }
+      const sub = resolve(c, trail);
+      if (sub) { boxes.push(sub.box); ns.push(...sub.nodes); gs.push(sub.id, ...sub.groups); depth = Math.max(depth, sub.depth + 1); if (layer < 0) layer = sub.layer; }
+    }
+    trail.delete(id);
+    let out: LGroup | null = null;
+    if (boxes.length) {
+      const pad = T.platePad, z1 = layer * T.layerGap - depth * T.plate;
+      out = {
+        id, spec: g, layer, plane: flat ? 0 : layer, nodes: ns, groups: gs, depth,
+        box: {
+          x0: Math.min(...boxes.map((b) => b.x0)) - pad.side, x1: Math.max(...boxes.map((b) => b.x1)) + pad.side,
+          y0: Math.min(...boxes.map((b) => b.y0)) - pad.back, y1: Math.max(...boxes.map((b) => b.y1)) + pad.front,
+          z0: z1 - T.plate, z1,
+        },
+      };
+    }
+    done.set(id, out);
+    return out;
+  };
+  const groups = [...gspec.keys()].map((id) => resolve(id, new Set())).filter((g): g is LGroup => !!g);
+
+  const shifts = new Map<number, number>(); // how far each layer moved when laid out flat
+  if (flat) {
+    // Seen from above, layers cannot stack, so each becomes a band: top layer at the top.
+    const layerIds = [...new Set(nodes.map((n) => n.layer))].sort((p, q) => q - p);
+    let cursor = 0;
+    for (const L of layerIds) {
+      const boxes = [...nodes.filter((n) => n.layer === L).map((n) => n.box), ...groups.filter((g) => g.layer === L).map((g) => g.box)];
+      const shift = cursor - Math.min(...boxes.map((b) => b.y0));
+      cursor = Math.max(...boxes.map((b) => b.y1)) + shift + T.bandGap;
+      for (const b of boxes) { b.y0 += shift; b.y1 += shift; }
+      shifts.set(L, shift);
+    }
+    for (const n of nodes) { n.box.z0 = 0; n.box.z1 = T.slab; }
+    for (const g of groups) { g.box.z1 = -g.depth * T.plate; g.box.z0 = g.box.z1 - T.plate; }
   }
 
   const edges: LEdge[] = [];
@@ -127,9 +164,9 @@ export function buildModel(spec: Spec): Model {
     const a = byId.get(e.from), b = byId.get(e.to);
     if (!a || !b) continue;
     const base = { id: edgeId(e), spec: e, kind: e.kind ?? ('flow' as EdgeKind) };
-    if (a.layer !== b.layer) {
+    const xLo = Math.max(a.box.x0, b.box.x0), xHi = Math.min(a.box.x1, b.box.x1);
+    if (a.layer !== b.layer && !flat) {
       // Between layers: one vertical line where the two footprints overlap.
-      const xLo = Math.max(a.box.x0, b.box.x0), xHi = Math.min(a.box.x1, b.box.x1);
       const yLo = Math.max(a.box.y0, b.box.y0), yHi = Math.min(a.box.y1, b.box.y1);
       const ok = xHi - xLo > 0.2 && yHi - yLo > 0.2;
       const x = (ok ? mid(xLo, xHi) : mid(a.box.x0, a.box.x1)) + (e.offset ?? 0);
@@ -137,17 +174,24 @@ export function buildModel(spec: Spec): Model {
       const y = ok ? yLo + 0.14 : mid(a.box.y0, a.box.y1);
       const up = b.layer > a.layer;
       const pts: Vec3[] = [[x, y, up ? a.box.z1 : a.box.z0], [x, y, up ? b.box.z0 : b.box.z1]];
+      const top = Math.max(a.layer, b.layer);
       edges.push({
-        ...base, riser: true, layer: Math.max(a.layer, b.layer), pts,
-        label: e.label ? { at: [x, y, mid(pts[0][2], pts[1][2])], anchor: e.flip ? 'end' : 'start', rect: null } : undefined,
+        ...base, riser: true, layer: top, plane: top, pts,
+        // Just above the lower node, clear of the upper layer's plate and its name.
+        label: e.label ? { at: [x, y, Math.min(pts[0][2], pts[1][2]) + T.riserLabel], anchor: e.flip ? 'start' : 'end', rect: null } : undefined,
         problem: ok ? undefined : 'nodes on different layers must sit one above the other to be joined',
       });
       continue;
     }
+    // On one plane. When flat, a line between bands leaves by the top or bottom unless told otherwise.
+    const between = a.layer !== b.layer && !e.via && xHi - xLo <= 0.2;
     const z = a.box.z0 + 0.005;
-    const r = routePlan(a.box, b.box, e);
+    const via = between ? 'y' : e.via;
+    // A row channel is written in the layer's own rows, so it moves with the layer.
+    const channel = e.channel !== undefined && via === 'y' ? e.channel + (shifts.get(a.layer) ?? 0) : e.channel;
+    const r = routePlan(a.box, b.box, { ...e, via, channel });
     edges.push({
-      ...base, riser: false, layer: a.layer, pts: r.pts.map(([x, y]) => [x, y, z] as Vec3),
+      ...base, riser: false, layer: a.layer, plane: flat ? 0 : a.layer, pts: r.pts.map(([x, y]) => [x, y, z] as Vec3),
       label: planLabel(r.pts, z, e), problem: r.problem,
     });
   }
@@ -159,6 +203,6 @@ export function buildModel(spec: Spec): Model {
     y0: pick((b) => b.y0, Math.min), y1: pick((b) => b.y1, Math.max),
     z0: pick((b) => b.z0, Math.min), z1: pick((b) => b.z1, Math.max),
   };
-  const layers = [...new Set(nodes.map((n) => n.layer))].sort((p, q) => p - q);
-  return { nodes, byId, groups, edges, bounds, layers };
+  const planes = [...new Set(nodes.map((n) => n.plane))].sort((p, q) => p - q);
+  return { nodes, byId, groups, edges, bounds, planes, flat };
 }

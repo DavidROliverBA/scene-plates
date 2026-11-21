@@ -23,13 +23,16 @@ export const tokens = {
   plate: 0.07, // group plate thickness
   platePad: { side: 0.45, back: 0.45, front: 0.62 },
   layerGap: 2.4, // vertical distance between layers
+  bandGap: 1.3, // gap between layers when the scene is drawn flat
   arrow: { length: 0.24, half: 0.1 },
+  riserLabel: 0.42, // how far above the lower node a between-layers label sits
 
   // Text sizes in world units, so text scales with the scene.
   text: { label: 0.2, sub: 0.135, edge: 0.14, plate: 0.15 },
   charWidth: 0.6, // monospace advance, as a fraction of font size
+  plateSpacing: 0.06, // extra space between the letters of a plate label
   minScale: 64, // px per unit; below this labels are too small to read on a slide
-  maxScale: 150,
+  maxScale: 125,
 
   font: {
     label: "ui-monospace, 'SF Mono', Menlo, Consolas, monospace",
@@ -37,7 +40,7 @@ export const tokens = {
   },
   caption: { size: 25, maxChars: 84 },
 
-  stroke: { edge: 2.4, pulse: 3.6, quiet: 1.5, face: 1 },
+  stroke: { edge: 2.4, pulse: 3.6, quiet: 1.5, face: 1, flatNode: 2 },
   dash: { fail: '8 6', quiet: '2 5' },
 
   // Default camera, and the range in which labels stay readable.

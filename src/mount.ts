@@ -2,13 +2,13 @@
 // Bundled into dist/scene-plates.min.js, which defines <scene-plate> and a
 // global ScenePlates.
 
-import type { Spec } from './spec';
+import type { Spec, View } from './spec';
 import { tokens as T, type ThemeName } from './tokens';
 import { compile } from './scene';
 import { renderFrame } from './render';
 import { validate } from './validate';
 
-export interface MountOpts { theme?: ThemeName | 'auto'; bare?: boolean; keys?: boolean }
+export interface MountOpts { theme?: ThemeName | 'auto'; bare?: boolean; keys?: boolean; view?: View }
 export interface Controller {
   readonly step: number;
   readonly stepCount: number;
@@ -20,7 +20,7 @@ export interface Controller {
 }
 
 export function mount(el: HTMLElement, spec: Spec, opts: MountOpts = {}): Controller {
-  const errs = validate(spec);
+  const errs = validate(spec, opts.view);
   if (errs.length) {
     const pre = document.createElement('pre');
     pre.style.cssText = 'white-space:pre-wrap;font:13px ui-monospace,Menlo,monospace;color:#D6002A;border:1px dashed #D6002A;padding:12px;margin:0';
@@ -28,7 +28,7 @@ export function mount(el: HTMLElement, spec: Spec, opts: MountOpts = {}): Contro
     el.replaceChildren(pre);
     return { step: 0, stepCount: 0, next: () => false, prev: () => false, go: () => false, restart() {}, destroy() {} };
   }
-  const scene = compile(spec), last = scene.states.length - 1;
+  const scene = compile(spec, opts.view), last = scene.states.length - 1;
   const still = matchMedia('(prefers-reduced-motion: reduce)'), dark = matchMedia('(prefers-color-scheme: dark)');
   let step = 0, from = -1, t0 = performance.now(), raf = 0, onScreen = true, entered = false;
 
@@ -97,7 +97,7 @@ if (typeof customElements !== 'undefined' && !customElements.get('scene-plate'))
         return;
       }
       if (!this.hasAttribute('tabindex')) this.tabIndex = 0;
-      this.ctl = mount(this, spec, { theme: (this.getAttribute('theme') as ThemeName) ?? 'auto', bare: this.hasAttribute('bare') });
+      this.ctl = mount(this, spec, { theme: (this.getAttribute('theme') as ThemeName) ?? 'auto', bare: this.hasAttribute('bare'), view: (this.getAttribute('view') as View) ?? undefined });
     }
     disconnectedCallback() { this.ctl?.destroy(); this.ctl = undefined; }
     get step() { return this.ctl?.step ?? 0; }

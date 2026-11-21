@@ -2,7 +2,7 @@
 
 Animated 3D diagrams for HTML decks, drawn from a small JSON spec.
 
-![A request flows through a gateway to a service and down to the data layer](docs/request-flow.gif)
+![An AWS landscape built up in three layers: edge, network and data](docs/aws-landscape.gif)
 
 You, or an AI model, write about fifty lines of JSON saying what the boxes are,
 how they join, and what happens at each step. The runtime does the drawing, the
@@ -27,12 +27,37 @@ Needs [Bun](https://bun.sh).
 
 ```sh
 bun install
-bun src/cli.ts check examples/request-flow.json    # is the spec sound?
+bun src/cli.ts check examples/*.json               # are the specs sound?
 bun src/cli.ts html examples/*.json -o deck.html   # a standalone deck
 open deck.html                                      # arrows, space or click
 ```
 
 [`examples/deck.html`](examples/deck.html) is that output, ready to open.
+
+## Examples
+
+| Spec | Shows |
+|---|---|
+| `01-flow-simple` | a five-box flowchart with one decision |
+| `02-flow-complex` | ten boxes, two plates, two capped loops, a zoom onto one part |
+| `03-aws-simple` | a serverless web app on one layer |
+| `04-aws-landscape` | three layers, with a VPC plate holding public and private subnets |
+| `05-aws-events-flat`, `06-aws-events-iso` | the same scene drawn flat and in 3D |
+| `07-request-flow`, `08-agent-loop` | two layers with a fail path; a loop with a cap |
+
+## Flat or 3D from one spec
+
+Add `"view": "flat"` and the scene is drawn from straight above. Layers become
+bands, top layer first, and lines between layers become ordinary arrows. Any
+spec can be drawn either way: `--view flat` on the command line, or
+`<scene-plate view="flat">` on a page.
+
+| Flat | 3D |
+|---|---|
+| ![The event-driven scene drawn flat](docs/aws-events-flat.png) | ![The same scene in 3D](docs/aws-events-iso.png) |
+
+Stacking is what 3D buys: the three-layer landscape above fits a slide in 3D
+and is refused as too small to read when drawn flat.
 
 ## A spec
 
@@ -83,6 +108,7 @@ its own slide. It follows the system light or dark setting unless you set
 ```sh
 bun src/cli.ts svg spec.json --all -o out/           # one still per step
 bun src/cli.ts svg spec.json --step 3 --theme dark   # one still to stdout
+bun src/cli.ts check spec.json --view flat           # would it also work flat?
 bun scripts/gif.ts spec.json out.gif                 # needs rsvg-convert and ffmpeg
 ```
 
@@ -103,9 +129,10 @@ bun scripts/gif.ts spec.json out.gif                 # needs rsvg-convert and ff
 
 ## Limits
 
-- Boxes only: no cylinders, icons or curved lines yet.
+- Boxes only: no cylinders, service icons or curved lines yet. Service names go in the labels.
 - A line between layers needs one node directly above the other.
 - A line that spans more than one layer is drawn in front of the layers between.
-- About nine nodes and three layers fit one slide; the checker says when to split.
+- About ten nodes and three layers fit one slide; the checker says when to split.
+- Keep to one row of nodes per layer when stacking three layers, or the scene gets too tall.
 
 MIT licence.

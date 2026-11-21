@@ -16,7 +16,7 @@ export interface NodeSpec {
 export interface GroupSpec {
   id: string;
   label?: string;
-  contains: string[]; // node ids, all on one layer
+  contains: string[]; // node ids or other group ids (plates nest), all on one layer
 }
 
 export interface EdgeSpec {
@@ -48,8 +48,11 @@ export interface StepSpec {
   camera?: CameraSpec; // stays until changed
 }
 
+export type View = 'iso' | 'flat';
+
 export interface Spec {
   title: string;
+  view?: View; // iso (default) is the 3D view; flat is the same scene seen from straight above
   description: string; // read out by screen readers: say what the diagram shows
   camera?: CameraSpec;
   nodes: NodeSpec[];

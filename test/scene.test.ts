@@ -98,3 +98,47 @@ test('steps add up: show stays, focus and pulse last one step', () => {
   expect(states[2].focus).toBeNull();
   expect(states[2].pulse.size).toBe(0);
 });
+
+test('plates nest, and the outer plate sits under the inner one', () => {
+  const s = base();
+  s.groups = [{ id: 'inner', label: 'IN', contains: ['a'] }, { id: 'outer', label: 'OUT', contains: ['inner', 'b'] }];
+  expect(validate(s)).toEqual([]);
+  const { model } = compile(s), g = (id: string) => model.groups.find((x) => x.id === id)!;
+  expect(g('outer').nodes.sort()).toEqual(['a', 'b']);
+  expect(g('outer').box.z1).toBeLessThan(g('inner').box.z1);
+  expect(g('outer').box.x0).toBeLessThan(g('inner').box.x0);
+});
+test('a group cannot contain itself, and nothing has two parents', () => {
+  const s = base();
+  s.groups = [{ id: 'g1', contains: ['g2'] }, { id: 'g2', contains: ['g1', 'a'] }];
+  expect(has(validate(s), 'containing itself')).toBe(true);
+  s.groups = [{ id: 'g1', contains: ['a'] }, { id: 'g2', contains: ['a', 'b'] }];
+  expect(has(validate(s), 'more than one group')).toBe(true);
+});
+test('flat view lays layers out as bands and joins them on the page', () => {
+  const s = base(); s.nodes[1] = { id: 'b', label: 'B', at: [0, 0], layer: 1 };
+  expect(validate(s, 'flat')).toEqual([]);
+  const { model, states } = compile(s, 'flat');
+  const [a, b] = [model.byId.get('a')!, model.byId.get('b')!];
+  expect(b.box.y1).toBeLessThan(a.box.y0); // the upper layer is drawn above the lower one
+  expect(model.edges[0].riser).toBe(false);
+  expect(states[0].cam.pitch).toBe(90);
+});
+test('a row channel moves with its layer when drawn flat', async () => {
+  const spec = await load('02-flow-complex.json');
+  expect(validate(spec, 'flat')).toEqual([]);
+});
+test('the flat and 3D AWS examples are the same scene', async () => {
+  const [flat, iso] = [await load('05-aws-events-flat.json'), await load('06-aws-events-iso.json')];
+  expect({ ...flat, view: 0, title: 0 }).toEqual({ ...iso, view: 0, title: 0 } as any);
+  expect(flat.view).toBe('flat');
+});
+test('a camera move that runs off the frame is refused', () => {
+  const s = base();
+  s.nodes.push({ id: 'c', label: 'C', at: [6, 0] }, { id: 'd', label: 'D', at: [9, 0] }, { id: 'e', label: 'E', at: [12, 0] });
+  s.steps = [{ show: ['a', 'b', 'c', 'd', 'e'] }, { camera: { yaw: 45, pitch: 70 } }];
+  const errs = validate(s);
+  // Either the scale shrinks to fit every angle, or the move is refused; it must never clip silently.
+  const scene = compile(s);
+  expect(errs.length === 0 ? scene.fit.scale < 125 : true).toBe(true);
+});

@@ -1,0 +1,27 @@
+{
+  "title": "Simple AWS: a serverless web app",
+  "description": "People reach a serverless web app through CloudFront. Static pages come from S3; API calls go through API Gateway to a Lambda function that stores data in DynamoDB.",
+  "nodes": [
+    { "id": "users", "label": "PEOPLE", "sub": "browser or phone", "kind": "quiet", "at": [0, 0] },
+    { "id": "cdn", "label": "CLOUDFRONT", "sub": "one front door", "at": [3.6, 0] },
+    { "id": "site", "label": "S3", "sub": "the static pages", "kind": "quiet", "at": [7, -2.2] },
+    { "id": "api", "label": "API GATEWAY", "sub": "checks each call", "kind": "gate", "at": [7, 0] },
+    { "id": "fn", "label": "LAMBDA", "sub": "runs the logic", "at": [10.4, 0] },
+    { "id": "table", "label": "DYNAMODB", "sub": "keeps the data", "kind": "success", "at": [10.4, 2.2] }
+  ],
+  "groups": [{ "id": "aws", "label": "AWS  eu-west-2", "contains": ["cdn", "site", "api", "fn", "table"] }],
+  "edges": [
+    { "from": "users", "to": "cdn", "label": "https" },
+    { "from": "cdn", "to": "site", "via": "yx", "label": "pages" },
+    { "from": "cdn", "to": "api", "label": "/api" },
+    { "from": "api", "to": "fn", "kind": "pass" },
+    { "from": "fn", "to": "table", "label": "read, write" }
+  ],
+  "steps": [
+    { "caption": "Everything people do goes through one front door, CloudFront.", "show": ["users", "cdn"], "pulse": ["users>cdn"] },
+    { "caption": "Pages, scripts and images are plain files served from S3.", "show": ["site"], "focus": ["cdn", "site"], "pulse": ["cdn>site"] },
+    { "caption": "Calls to /api go to API Gateway, which checks each one.", "show": ["api"], "focus": ["cdn", "api"], "pulse": ["cdn>api"] },
+    { "caption": "A Lambda function runs the logic and keeps data in DynamoDB.", "show": ["fn", "table"], "focus": ["api", "fn", "table"], "pulse": ["api>fn", "fn>table"] },
+    { "caption": "No servers to run: every part scales on its own and bills per use." }
+  ]
+}

@@ -5,7 +5,7 @@
 
 import { mkdirSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
-import type { Spec } from './spec';
+import type { Spec, View } from './spec';
 import type { ThemeName } from './tokens';
 import { compile } from './scene';
 import { renderFrame } from './render';
@@ -17,26 +17,29 @@ const files: string[] = [];
 for (let i = 0; i < rest.length; i++) {
   const a = rest[i];
   if (a === '--all') flags.all = true;
-  else if (a === '-o' || a === '--step' || a === '--theme') flags[a.replace(/^-+/, '')] = rest[++i];
+  else if (a === '-o' || a === '--step' || a === '--theme' || a === '--view') flags[a.replace(/^-+/, '')] = rest[++i];
   else files.push(a);
 }
+
+const view = flags.view as View | undefined;
+if (view && view !== 'iso' && view !== 'flat') fail('--view must be iso or flat');
 
 async function load(path: string): Promise<Spec> {
   let spec: Spec;
   try { spec = await Bun.file(path).json(); } catch (e) { fail(`${path}: not readable JSON (${(e as Error).message})`); }
-  const errs = validate(spec!);
+  const errs = validate(spec!, view);
   if (errs.length) fail(`${path}: ${errs.length} problem${errs.length > 1 ? 's' : ''}\n` + errs.map((m) => `  - ${m}`).join('\n'));
   return spec!;
 }
 function fail(msg: string): never { console.error(msg); process.exit(1); }
-const usage = () => fail('Usage:\n  scene-plates check <spec.json>...\n  scene-plates svg <spec.json> [--step N | --all] [--theme light|dark] [-o file-or-folder]\n  scene-plates html <spec.json>... -o deck.html');
+const usage = () => fail('Usage:\n  scene-plates check <spec.json>...\n  scene-plates svg <spec.json> [--step N | --all] [--theme light|dark] [--view iso|flat] [-o file-or-folder]\n  scene-plates html <spec.json>... -o deck.html');
 
 if (!cmd || !files.length) usage();
 
 if (cmd === 'check') {
-  for (const p of files) { const s = await load(p); console.log(`ok  ${p}  (${s.nodes.length} nodes, ${(s.steps ?? []).length || 1} steps)`); }
+  for (const p of files) { const s = await load(p); console.log(`ok  ${p}  (${s.nodes.length} nodes, ${(s.steps ?? []).length || 1} steps, ${view ?? s.view ?? 'iso'})`); }
 } else if (cmd === 'svg') {
-  const spec = await load(files[0]), scene = compile(spec);
+  const spec = await load(files[0]), scene = compile(spec, view);
   const theme = (flags.theme as ThemeName) ?? 'light';
   if (flags.all) {
     const dir = (flags.o as string) ?? 'out';
@@ -57,7 +60,7 @@ if (cmd === 'check') {
   const js = (await built.outputs[0].text()).replace(/<\/script/gi, '<\\/script');
   const safe = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
   const slides = specs.map((s, i) =>
-    `<section class="slide"${i ? '' : ' data-on'}><h1>${safe(s.title)}</h1><scene-plate><script type="application/json">${JSON.stringify(s).replace(/</g, '\\u003c')}</script></scene-plate></section>`).join('\n');
+    `<section class="slide"${i ? '' : ' data-on'}><h1>${safe(s.title)}</h1><scene-plate${view ? ` view="${view}"` : ''}><script type="application/json">${JSON.stringify(s).replace(/</g, '\\u003c')}</script></scene-plate></section>`).join('\n');
   const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${safe(specs.length === 1 ? specs[0].title : 'Scene plates')}</title>

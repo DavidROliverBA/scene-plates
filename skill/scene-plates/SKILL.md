@@ -79,7 +79,21 @@ can only be joined when one sits above the other. `"flip": true` moves a label
 to the other side of its line. `"hold": true` keeps an edge hidden until a
 step shows it by id.
 
-**Groups** draw a plate under their nodes. All nodes of a group are on one layer.
+**Groups** draw a plate under their nodes. All nodes of a group are on one
+layer. A group may contain other groups, so plates nest: a VPC plate holding a
+public-subnet plate and a private-subnet plate. Leave 2 between nodes whose
+plates are neighbours (columns 3.6 and 7.6), so the plates do not touch.
+
+**View.** `"view": "flat"` draws the same scene from straight above: layers
+become bands, top layer first, and lines between layers become ordinary
+arrows. Use flat for documents and simple flows, 3D (the default) when the
+point is layers. Check a spec both ways with `sp check x.json --view flat`.
+
+**Cloud diagrams.** Put the service name in `label` (`LAMBDA`, `S3`, `AURORA`)
+and what it does there in `sub`. Use plates for region, VPC and subnets. Use
+layers for edge, network and data, with **one row of nodes per layer** when
+there are three layers. Colour still follows the kinds above, not the vendor's
+icon colours.
 
 ## Steps: the only six moves
 
@@ -103,7 +117,11 @@ With no `steps`, the whole scene shows at once.
 - Use `focus` plus `pulse` to point at the thing the caption is about.
 - Move the camera only when it shows something new, such as a lower layer.
   Two or three camera moves per scene is plenty. End on the whole picture.
-- At most about 9 nodes and 3 layers per scene. The checker refuses scenes
+  Wide scenes need a small yaw (10 to 15) to fit; the checker refuses a move
+  that would run off the frame.
+- Zoom in on one part with `"camera": { "target": ["group-id"], "zoom": 1.3 }`
+  and return with `{ "target": null, "zoom": 1 }`.
+- At most about 10 nodes and 3 layers per scene. The checker refuses scenes
   whose labels would be too small; split them into two scenes.
 - Red means fail-closed and nothing else.
 
@@ -115,7 +133,7 @@ With no `steps`, the whole scene shows at once.
 ```
 
 Or put the JSON inline in a `<script type="application/json">` child, which
-works from `file://` with no server. Attributes: `theme="light|dark"` (default
+works from `file://` with no server. Attributes: `view="flat|iso"`, `theme="light|dark"` (default
 follows the page's `data-theme`, then the system), `bare` (no background). The
 element has `next()`, `prev()`, `go(i)`, `restart()`, `step` and `stepCount`;
 `next()` returns `false` on the last step so the deck can move to its next

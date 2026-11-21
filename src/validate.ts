@@ -2,9 +2,9 @@
 // an empty list means the scene is safe to render.
 
 import { tokens as T } from './tokens';
-import { EDGE_KINDS, NODE_KINDS, type CameraSpec, type Spec } from './spec';
+import { EDGE_KINDS, NODE_KINDS, type CameraSpec, type Spec, type View } from './spec';
 import { edgeId, type Box, type LEdge } from './layout';
-import { compile } from './scene';
+import { compile, frameBox } from './scene';
 
 type Rect = [number, number, number, number];
 const EPS = 0.02;
@@ -36,7 +36,7 @@ function meet(a: Seg, b: Seg): 'cross' | 'touch' | null {
   return insideH || insideV ? 'touch' : null; // corner to corner is fine
 }
 
-export function validate(spec: Spec): string[] {
+export function validate(spec: Spec, view?: View): string[] {
   const errs: string[] = [];
   const bad = (m: string) => { errs.push(m); };
 
@@ -63,17 +63,23 @@ export function validate(spec: Spec): string[] {
     if (n.kind && !NODE_KINDS.includes(n.kind)) bad(`Node "${n.id}" has kind "${n.kind}"; use one of ${NODE_KINDS.join(', ')}.`);
     if (n.layer !== undefined && (!Number.isInteger(n.layer) || n.layer < 0)) bad(`Node "${n.id}" layer must be a whole number, 0 or more.`);
   }
-  const grouped = new Set<string>(), groupIds = new Set<string>();
+  if (spec.view && spec.view !== 'iso' && spec.view !== 'flat') bad(`"view" must be "iso" or "flat".`);
+  const groupIds = new Set((spec.groups ?? []).map((g) => g.id)), parent = new Map<string, string>();
   for (const g of spec.groups ?? []) {
     claim(g.id, 'Group');
-    groupIds.add(g.id);
     if (!g.contains?.length) { bad(`Group "${g.id}" contains nothing.`); continue; }
     for (const id of g.contains) {
-      if (!nodeIds.has(id)) bad(`Group "${g.id}" contains "${id}", which is not a node.`);
-      else if (grouped.has(id)) bad(`Node "${id}" is in more than one group.`);
-      grouped.add(id);
+      if (!nodeIds.has(id) && !groupIds.has(id)) bad(`Group "${g.id}" contains "${id}", which is not a node or group.`);
+      else if (parent.has(id)) bad(`"${id}" is in more than one group ("${parent.get(id)}" and "${g.id}").`);
+      parent.set(id, g.id);
     }
-    if (new Set(g.contains.map((id) => layerOf.get(id))).size > 1) bad(`Group "${g.id}" spans more than one layer; a group is one plate on one layer.`);
+  }
+  for (const g of spec.groups ?? []) {
+    const seen = new Set([g.id]);
+    for (let p = parent.get(g.id); p; p = parent.get(p)) {
+      if (seen.has(p)) { bad(`Group "${g.id}" ends up containing itself.`); break; }
+      seen.add(p);
+    }
   }
   const edgeIds = new Set<string>();
   for (const e of spec.edges ?? []) {
@@ -109,7 +115,7 @@ export function validate(spec: Spec): string[] {
   if (errs.length) return errs;
 
   // --- Geometry ----------------------------------------------------------
-  const scene = compile(spec), { model } = scene;
+  const scene = compile(spec, view), { model } = scene;
 
   if (scene.fit.scale < T.minScale) {
     bad(`The scene is too big for one slide: labels would be about ${Math.round(scene.fit.scale * T.text.label)}px on a 1280px frame. Split it into two scenes or move nodes closer.`);
@@ -123,17 +129,21 @@ export function validate(spec: Spec): string[] {
   for (let i = 0; i < model.nodes.length; i++) {
     for (let j = i + 1; j < model.nodes.length; j++) {
       const [a, b] = [model.nodes[i], model.nodes[j]];
-      if (a.layer === b.layer && rectsOverlap(foot(a.box), foot(b.box))) bad(`Nodes "${a.id}" and "${b.id}" overlap.`);
+      if (a.plane === b.plane && rectsOverlap(foot(a.box), foot(b.box))) bad(`Nodes "${a.id}" and "${b.id}" overlap.`);
     }
   }
   for (let i = 0; i < model.groups.length; i++) {
-    for (let j = i + 1; j < model.groups.length; j++) {
-      const [a, b] = [model.groups[i], model.groups[j]];
-      if (a.layer === b.layer && rectsOverlap(foot(a.box), foot(b.box))) bad(`Group plates "${a.id}" and "${b.id}" overlap; move their nodes apart.`);
-    }
     const g = model.groups[i];
+    if (new Set(g.nodes.map((id) => model.byId.get(id)!.layer)).size > 1) bad(`Group "${g.id}" spans more than one layer; a group is one plate on one layer.`);
+    const room = g.box.x1 - g.box.x0 - 0.4, per = T.charWidth * T.text.plate + T.plateSpacing;
+    if (g.spec.label && g.spec.label.length * per > room) bad(`Label "${g.spec.label}" is too long for the plate of group "${g.id}" (${Math.floor(room / per)} characters fit).`);
+    for (let j = i + 1; j < model.groups.length; j++) {
+      const b = model.groups[j];
+      if (g.plane !== b.plane || g.groups.includes(b.id) || b.groups.includes(g.id)) continue;
+      if (rectsOverlap(foot(g.box), foot(b.box))) bad(`Group plates "${g.id}" and "${b.id}" overlap; move their nodes apart, or put one inside the other.`);
+    }
     for (const n of model.nodes) {
-      if (n.layer === g.layer && !g.nodes.includes(n.id) && rectsOverlap(foot(n.box), foot(g.box))) bad(`Node "${n.id}" sits on the plate of group "${g.id}" without being in it.`);
+      if (n.plane === g.plane && !g.nodes.includes(n.id) && rectsOverlap(foot(n.box), foot(g.box))) bad(`Node "${n.id}" sits on the plate of group "${g.id}" without being in it.`);
     }
   }
 
@@ -142,7 +152,7 @@ export function validate(spec: Spec): string[] {
   for (const e of flat) {
     if (e.problem) continue;
     for (const n of model.nodes) {
-      if (n.layer !== e.layer || n.id === e.spec.from || n.id === e.spec.to) continue;
+      if (n.plane !== e.plane || n.id === e.spec.from || n.id === e.spec.to) continue;
       if (segs(e).some((s) => segHitsRect(s, foot(n.box)))) bad(`Edge "${e.id}" runs through node "${n.id}". Change "via" or "channel", or move the node.`);
     }
     for (const end of [e.spec.from, e.spec.to]) {
@@ -153,7 +163,7 @@ export function validate(spec: Spec): string[] {
   for (let i = 0; i < flat.length; i++) {
     for (let j = i + 1; j < flat.length; j++) {
       const [a, b] = [flat[i], flat[j]];
-      if (a.layer !== b.layer || a.problem || b.problem) continue;
+      if (a.plane !== b.plane || a.problem || b.problem) continue;
       const shared = [a.spec.from, a.spec.to].some((n) => n === b.spec.from || n === b.spec.to);
       let worst: 'cross' | 'touch' | null = null;
       for (const s of segs(a)) for (const t of segs(b)) {
@@ -168,10 +178,17 @@ export function validate(spec: Spec): string[] {
   const labels = flat.filter((e) => e.label?.rect && !e.problem);
   for (const e of labels) {
     const r = e.label!.rect!;
-    for (const n of model.nodes) if (n.layer === e.layer && rectsOverlap(r, foot(n.box))) bad(`The label of edge "${e.id}" overlaps node "${n.id}". Shorten it, set "flip": true, or move the nodes apart.`);
-    for (const o of flat) if (o !== e && o.layer === e.layer && segs(o).some((s) => segHitsRect(s, r))) bad(`The label of edge "${e.id}" sits on edge "${o.id}". Set "flip": true or re-route.`);
-    for (const o of labels) if (o !== e && o.id > e.id && o.layer === e.layer && rectsOverlap(r, o.label!.rect!)) bad(`The labels of edges "${e.id}" and "${o.id}" overlap.`);
+    for (const n of model.nodes) if (n.plane === e.plane && rectsOverlap(r, foot(n.box))) bad(`The label of edge "${e.id}" overlaps node "${n.id}". Shorten it, set "flip": true, or move the nodes apart.`);
+    for (const o of flat) if (o !== e && o.plane === e.plane && segs(o).some((s) => segHitsRect(s, r))) bad(`The label of edge "${e.id}" sits on edge "${o.id}". Set "flip": true or re-route.`);
+    for (const o of labels) if (o !== e && o.id > e.id && o.plane === e.plane && rectsOverlap(r, o.label!.rect!)) bad(`The labels of edges "${e.id}" and "${o.id}" overlap.`);
   }
+
+  // A camera move must not push the scene out of the frame (zooming in on a target is deliberate).
+  scene.states.forEach((st, i) => {
+    if (st.cam.target || st.cam.zoom > 1.001) return;
+    const [l, t, r, b] = frameBox(scene, st.cam), F = T.frame;
+    if (l < 8 || t < 4 || r > F.w - 8 || b > F.h - F.captionBand + 34) bad(`Step ${i + 1}: at yaw ${st.cam.yaw}, pitch ${st.cam.pitch} the scene runs off the frame. Use a smaller camera move.`);
+  });
 
   // --- Steps, checked against what is on screen at that moment ------------
   if (spec.steps?.length) {

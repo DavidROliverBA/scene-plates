@@ -14,14 +14,15 @@ import { tokens as T, type ThemeName } from '../src/tokens';
 const args = process.argv.slice(2);
 const opt = (name: string, d: string) => { const i = args.indexOf(name); return i >= 0 ? args.splice(i, 2)[1] : d; };
 const theme = opt('--theme', 'light') as ThemeName, width = opt('--width', '960');
+const view = (opt('--view', '') || undefined) as 'iso' | 'flat' | undefined;
 const [specPath, outPath] = args;
 if (!specPath || !outPath) { console.error('Usage: bun scripts/gif.ts spec.json out.gif [--theme dark] [--width 960]'); process.exit(1); }
 
 const spec = await Bun.file(specPath).json();
-const errs = validate(spec);
+const errs = validate(spec, view);
 if (errs.length) { console.error(errs.map((e) => '- ' + e).join('\n')); process.exit(1); }
 
-const scene = compile(spec), fps = 15, hold = 1900, dir = mkdtempSync(join(tmpdir(), 'scene-plates-'));
+const scene = compile(spec, view), fps = 15, hold = 1900, dir = mkdtempSync(join(tmpdir(), 'scene-plates-'));
 let n = 0;
 for (let step = 0; step < scene.states.length; step++) {
   for (let t = 0; t < T.motion.step + hold; t += 1000 / fps) {

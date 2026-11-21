@@ -1,7 +1,7 @@
 // Camera maths, the state of the scene at each step, and the fixed fit to the frame.
 
 import { tokens as T } from './tokens';
-import type { Spec } from './spec';
+import type { Spec, View } from './spec';
 import { buildModel, type Box, type Model, type Vec3 } from './layout';
 
 export interface Cam { yaw: number; pitch: number; zoom: number; target: string[] | null }
@@ -19,10 +19,13 @@ export interface Scene {
 
 // Parallel projection. x runs right and away, y runs right and towards the viewer, z is up.
 export function view(yawDeg: number, pitchDeg: number) {
+  return view_(yawDeg, pitchDeg);
+}
+function view_(yawDeg: number, pitchDeg: number) {
   const t = (yawDeg * Math.PI) / 180, p = (pitchDeg * Math.PI) / 180;
   const ct = Math.cos(t), st = Math.sin(t), sp = Math.sin(p), cp = Math.cos(p);
   return {
-    st,
+    st, ct, cot: cp / sp,
     ux: [ct, -st * sp] as [number, number],
     uy: [st, ct * sp] as [number, number],
     p: ([x, y, z]: Vec3): [number, number] => [x * ct + y * st, (-x * st + y * ct) * sp - z * cp],
@@ -47,9 +50,9 @@ export function targetPoint(model: Model, ids: string[]): Vec3 | null {
   return [span(0), span(1), span(2)];
 }
 
-function baseCam(spec: Spec): Cam {
+function baseCam(spec: Spec, flat: boolean): Cam {
   return {
-    yaw: spec.camera?.yaw ?? T.camera.yaw, pitch: spec.camera?.pitch ?? T.camera.pitch,
+    yaw: flat ? 0 : spec.camera?.yaw ?? T.camera.yaw, pitch: flat ? 90 : spec.camera?.pitch ?? T.camera.pitch,
     zoom: spec.camera?.zoom ?? T.camera.zoom, target: spec.camera?.target ?? null,
   };
 }
@@ -61,18 +64,19 @@ export function buildStates(spec: Spec, model: Model): StepState[] {
   if (!steps.length) {
     return [{
       visible: new Set([...model.nodes.map((n) => n.id), ...model.edges.map((e) => e.id)]),
-      focus: null, pulse: new Set(), cam: baseCam(spec), caption: '',
+      focus: null, pulse: new Set(), cam: baseCam(spec, model.flat), caption: '',
     }];
   }
   const out: StepState[] = [];
   const visible = new Set<string>();
-  let cam = baseCam(spec);
+  let cam = baseCam(spec, model.flat);
   for (const s of steps) {
     for (const id of expand(s.show)) visible.add(id);
     for (const id of expand(s.hide)) visible.delete(id);
     if (s.camera) {
       cam = {
-        yaw: s.camera.yaw ?? cam.yaw, pitch: s.camera.pitch ?? cam.pitch, zoom: s.camera.zoom ?? cam.zoom,
+        // Flat scenes ignore turning and tilting; zoom and target still apply.
+        yaw: model.flat ? 0 : s.camera.yaw ?? cam.yaw, pitch: model.flat ? 90 : s.camera.pitch ?? cam.pitch, zoom: s.camera.zoom ?? cam.zoom,
         target: s.camera.target === undefined ? cam.target : s.camera.target,
       };
     }
@@ -84,17 +88,21 @@ export function buildStates(spec: Spec, model: Model): StepState[] {
   return out;
 }
 
-export function compile(spec: Spec): Scene {
-  const model = buildModel(spec);
+export function compile(spec: Spec, view?: View): Scene {
+  const model = buildModel(spec, view);
   const states = buildStates(spec, model);
   // Fit the whole scene once, at the base camera. The scale never changes after
   // that except by an explicit zoom, so nothing "breathes" as the camera turns.
-  const cam = baseCam(spec), v = view(cam.yaw, cam.pitch), F = T.frame;
+  const cam = baseCam(spec, model.flat), v = view_(cam.yaw, cam.pitch), F = T.frame;
+  const availW = F.w - 2 * F.marginX, availH = F.h - F.marginTop - F.captionBand;
+  const span = (c: { yaw: number; pitch: number }) => {
+    const q = corners(model.bounds).map(view_(c.yaw, c.pitch).p), x = q.map((p) => p[0]), y = q.map((p) => p[1]);
+    return [Math.max(Math.max(...x) - Math.min(...x), 0.001), Math.max(Math.max(...y) - Math.min(...y), 0.001)];
+  };
+  // The scale that still fits at every camera angle the steps use.
+  const scale = Math.min(T.maxScale, ...[cam, ...states.map((s) => s.cam)].map((c) => { const [w, h] = span(c); return Math.min(availW / w, availH / h); }));
   const pts = corners(model.bounds).map(v.p);
   const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
-  const bw = Math.max(Math.max(...xs) - Math.min(...xs), 0.001), bh = Math.max(Math.max(...ys) - Math.min(...ys), 0.001);
-  const availW = F.w - 2 * F.marginX, availH = F.h - F.marginTop - F.captionBand;
-  const scale = Math.min(availW / bw, availH / bh, T.maxScale);
   const mid: [number, number] = [F.w / 2, F.marginTop + availH / 2];
   const anchor = centre(model.bounds), pa = v.p(anchor);
   const c2: [number, number] = [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2];
@@ -121,4 +129,11 @@ export function alphas(scene: Scene, s: StepState | null) {
     return s.focus && !g.nodes.some((n) => s.focus!.has(n)) ? dim : 1;
   };
   return { node, edge, group };
+}
+
+// Where the whole scene lands on screen for a camera with no target: [left, top, right, bottom].
+export function frameBox(scene: Scene, cam: Cam): [number, number, number, number] {
+  const v = view_(cam.yaw, cam.pitch), pa = v.p(scene.fit.anchor), S = scene.fit.scale * cam.zoom;
+  const q = corners(scene.model.bounds).map((c) => { const p = v.p(c); return [scene.fit.anchorScreen[0] + S * (p[0] - pa[0]), scene.fit.anchorScreen[1] + S * (p[1] - pa[1])]; });
+  return [Math.min(...q.map((p) => p[0])), Math.min(...q.map((p) => p[1])), Math.max(...q.map((p) => p[0])), Math.max(...q.map((p) => p[1]))];
 }

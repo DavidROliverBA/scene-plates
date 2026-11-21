@@ -67,12 +67,12 @@ export function renderFrame(scene: Scene, o: FrameOpts = {}): string {
   const open = (a: number) => (a < 0.995 ? `<g opacity="${a.toFixed(2)}">` : '<g>');
 
   const sideX = (b: Box) => (v.st > 0.001 ? b.x0 : v.st < -0.001 ? b.x1 : null);
-  const faces = (b: Box, top: string, front: string, side: string, stroke: string, topOpacity = 1) => {
+  const faces = (b: Box, top: string, front: string, side: string, stroke: string, topOpacity = 1, sw = 0) => {
     const sx = sideX(b);
     let s = '';
     if (sx !== null) s += `<polygon points="${poly([[sx, b.y0, b.z1], [sx, b.y1, b.z1], [sx, b.y1, b.z0], [sx, b.y0, b.z0]])}" fill="${side}"/>`;
     s += `<polygon points="${poly([[b.x0, b.y1, b.z1], [b.x1, b.y1, b.z1], [b.x1, b.y1, b.z0], [b.x0, b.y1, b.z0]])}" fill="${front}"/>`;
-    s += `<polygon points="${poly([[b.x0, b.y0, b.z1], [b.x1, b.y0, b.z1], [b.x1, b.y1, b.z1], [b.x0, b.y1, b.z1]])}" fill="${top}"${topOpacity < 1 ? ` fill-opacity="${topOpacity}"` : ''} stroke="${stroke}"/>`;
+    s += `<polygon points="${poly([[b.x0, b.y0, b.z1], [b.x1, b.y0, b.z1], [b.x1, b.y1, b.z1], [b.x0, b.y1, b.z1]])}" fill="${top}"${topOpacity < 1 ? ` fill-opacity="${topOpacity}"` : ''} stroke="${stroke}"${sw ? ` stroke-width="${sw}"` : ''}/>`;
     return s;
   };
 
@@ -81,7 +81,7 @@ export function renderFrame(scene: Scene, o: FrameOpts = {}): string {
     if (a < 0.01) return;
     const b = g.box;
     let s = open(a) + faces(b, th.plate, th.plateStroke, mix(th.plateStroke, th.shade, 0.25), th.plateStroke, 0.62);
-    if (g.spec.label) s += flat([b.x0 + 0.2, b.y1 - 0.17, b.z1], g.spec.label, T.text.plate, th.muted, 'start', ' letter-spacing="6"');
+    if (g.spec.label) s += flat([b.x0 + 0.2, b.y1 - 0.17, b.z1], g.spec.label, T.text.plate, th.muted, 'start', ` letter-spacing="${T.plateSpacing * 100}"`);
     out.push(s + '</g>');
   };
 
@@ -92,7 +92,7 @@ export function renderFrame(scene: Scene, o: FrameOpts = {}): string {
     const dz = p === 0 ? (1 - e) * T.motion.drop : q === 0 ? e * T.motion.drop * 0.5 : 0; // drops in, lifts out
     const b = { ...n.box, z0: n.box.z0 + dz, z1: n.box.z1 + dz };
     const col = th.kind[n.kind];
-    let s = open(a) + faces(b, mix(th.surface, col, th.tint), col, mix(col, th.shade, 0.3), col);
+    let s = open(a) + faces(b, mix(th.surface, col, th.tint), col, mix(col, th.shade, 0.3), col, 1, model.flat ? T.stroke.flatNode : 0);
     const cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2, L = T.text.label;
     if (n.spec.sub) {
       s += flat([cx, cy - 0.03, b.z1], n.spec.label, L, col, 'middle', ' font-weight="700"');
@@ -132,8 +132,13 @@ export function renderFrame(scene: Scene, o: FrameOpts = {}): string {
       const n = pts.length, [t, u] = [pts[n - 1], pts[n - 2]];
       const len = Math.hypot(t[0] - u[0], t[1] - u[1]) || 1;
       const d = [(t[0] - u[0]) / len, (t[1] - u[1]) / len], { length: L, half: Hf } = T.arrow;
-      const base: Vec3 = [t[0] - d[0] * L, t[1] - d[1] * L, t[2]];
-      head = `<polygon points="${poly([t, [base[0] - d[1] * Hf, base[1] + d[0] * Hf, t[2]], [base[0] + d[1] * Hf, base[1] - d[0] * Hf, t[2]]])}" fill="${col}"/>`;
+      // A box hides the floor just behind it, so a line arriving from behind stops
+      // where it meets the box on screen; otherwise its arrowhead would be lost.
+      const facing = d[1] > 0.5 ? v.ct : d[0] < -0.5 ? Math.max(v.st, 0) : d[0] > 0.5 ? Math.max(-v.st, 0) : 0;
+      const back = Math.min(T.slab * v.cot * facing, Math.max(0, len - L - 0.1));
+      const tip: Vec3 = [t[0] - d[0] * back, t[1] - d[1] * back, t[2]];
+      const base: Vec3 = [tip[0] - d[0] * L, tip[1] - d[1] * L, t[2]];
+      head = `<polygon points="${poly([tip, [base[0] - d[1] * Hf, base[1] + d[0] * Hf, t[2]], [base[0] + d[1] * Hf, base[1] - d[0] * Hf, t[2]]])}" fill="${col}"/>`;
       pts = [...pts.slice(0, -1), base];
     }
     const scr = pts.map(P);
@@ -150,7 +155,7 @@ export function renderFrame(scene: Scene, o: FrameOpts = {}): string {
       const lc = ed.kind === 'flow' ? th.muted : col;
       if (ed.riser) {
         const m = P(ed.label.at), dx = ed.label.anchor === 'end' ? -14 : 14;
-        s += `<text x="${f(m[0] + dx)}" y="${f(m[1] + 4)}" font-size="${f(T.text.edge * S)}" text-anchor="${ed.label.anchor}" fill="${lc}">${esc(ed.spec.label)}</text>`;
+        s += `<text x="${f(m[0] + dx)}" y="${f(m[1] + 4)}" font-size="${f(T.text.edge * S)}" text-anchor="${ed.label.anchor}" fill="${lc}" stroke="${th.bg}" stroke-width="3.5" paint-order="stroke">${esc(ed.spec.label)}</text>`;
       } else {
         s += flat(ed.label.at, ed.spec.label, T.text.edge, lc, ed.label.anchor);
       }
@@ -166,11 +171,11 @@ export function renderFrame(scene: Scene, o: FrameOpts = {}): string {
   // Painter's order: lowest layer first; within a layer plates, floor lines,
   // lines coming up from below, then nodes from far to near.
   const far = (b: Box) => v.far([(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, b.z0]);
-  for (const layer of model.layers) {
-    model.groups.filter((g) => g.layer === layer).sort((x, y) => far(y.box) - far(x.box)).forEach(drawGroup);
-    model.edges.filter((x) => x.layer === layer && !x.riser).forEach(drawEdge);
-    model.edges.filter((x) => x.layer === layer && x.riser).forEach(drawEdge);
-    model.nodes.filter((n) => n.layer === layer).sort((x, y) => far(y.box) - far(x.box)).forEach(drawNode);
+  for (const plane of model.planes) {
+    model.groups.filter((g) => g.plane === plane).sort((x, y) => y.depth - x.depth || far(y.box) - far(x.box)).forEach(drawGroup);
+    model.edges.filter((x) => x.plane === plane && !x.riser).forEach(drawEdge);
+    model.edges.filter((x) => x.plane === plane && x.riser).forEach(drawEdge);
+    model.nodes.filter((n) => n.plane === plane).sort((x, y) => far(y.box) - far(x.box)).forEach(drawNode);
   }
 
   const F = T.frame;

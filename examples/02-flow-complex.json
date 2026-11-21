@@ -1,0 +1,43 @@
+{
+  "title": "Complex flowchart: handling an order",
+  "description": "An order is checked for stock, paid for with up to three attempts, then picked, packed and shipped by the warehouse. Out-of-stock orders wait; failed payments cancel the order.",
+  "nodes": [
+    { "id": "order", "label": "ORDER PLACED", "sub": "basket confirmed", "at": [0, 0] },
+    { "id": "stock", "label": "IN STOCK?", "sub": "check warehouse", "kind": "gate", "at": [3.4, 0] },
+    { "id": "wait", "label": "WAIT", "sub": "until restocked", "kind": "quiet", "at": [3.4, -2.3] },
+    { "id": "charge", "label": "TAKE PAYMENT", "sub": "card or wallet", "at": [6.8, 0] },
+    { "id": "paid", "label": "PAID?", "sub": "bank answers", "kind": "gate", "at": [10.2, 0] },
+    { "id": "cancel", "label": "CANCELLED", "sub": "customer told why", "kind": "fail", "at": [10.2, -2.3] },
+    { "id": "pick", "label": "PICK", "sub": "from the shelves", "at": [10.2, 2.4] },
+    { "id": "pack", "label": "PACK", "sub": "box and label", "at": [6.8, 2.4] },
+    { "id": "ship", "label": "SHIP", "sub": "hand to courier", "at": [3.4, 2.4] },
+    { "id": "done", "label": "DELIVERED", "sub": "signed for", "kind": "success", "at": [0, 2.4] }
+  ],
+  "groups": [
+    { "id": "checkout", "label": "CHECKOUT", "contains": ["charge", "paid"] },
+    { "id": "warehouse", "label": "WAREHOUSE", "contains": ["pick", "pack", "ship"] }
+  ],
+  "edges": [
+    { "from": "order", "to": "stock" },
+    { "from": "stock", "to": "wait", "label": "no", "offset": -0.4, "flip": true },
+    { "from": "wait", "to": "stock", "kind": "loop", "label": "daily, max 14", "offset": 0.4 },
+    { "from": "stock", "to": "charge", "kind": "pass", "label": "yes" },
+    { "from": "charge", "to": "paid" },
+    { "from": "paid", "to": "charge", "kind": "loop", "via": "y", "channel": -0.95, "offset": -0.5, "label": "declined, max 3 tries", "hold": true },
+    { "from": "paid", "to": "cancel", "kind": "fail", "label": "3 fails", "offset": 0.5, "hold": true },
+    { "from": "paid", "to": "pick", "kind": "pass", "label": "yes" },
+    { "from": "pick", "to": "pack" },
+    { "from": "pack", "to": "ship" },
+    { "from": "ship", "to": "done", "kind": "pass" }
+  ],
+  "steps": [
+    { "caption": "An order arrives and the warehouse is checked for stock.", "show": ["order", "stock"], "pulse": ["order>stock"] },
+    { "caption": "Out of stock? The order waits and re-checks daily, for 14 days at most.", "show": ["wait"], "focus": ["stock", "wait"], "pulse": ["stock>wait", "wait>stock"] },
+    { "caption": "In stock: checkout takes the payment and the bank answers.", "show": ["checkout"], "focus": ["stock", "checkout"], "pulse": ["stock>charge", "charge>paid"] },
+    { "caption": "A declined card is retried, but never more than three times.", "show": ["paid>charge"], "focus": ["checkout"], "pulse": ["paid>charge"], "camera": { "target": ["checkout"], "zoom": 1.35 } },
+    { "caption": "After three failures the order is cancelled and the customer is told.", "show": ["cancel", "paid>cancel"], "focus": ["paid", "cancel"], "pulse": ["paid>cancel"] },
+    { "caption": "Once paid, the warehouse picks, packs and ships.", "show": ["warehouse"], "focus": ["paid", "warehouse"], "pulse": ["paid>pick", "pick>pack", "pack>ship"], "camera": { "target": null, "zoom": 1 } },
+    { "caption": "The courier delivers, and the order is complete.", "show": ["done"], "focus": ["ship", "done"], "pulse": ["ship>done"] },
+    { "caption": "One happy path, two capped loops, one way to fail." }
+  ]
+}

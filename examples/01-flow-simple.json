@@ -1,0 +1,25 @@
+{
+  "title": "Simple flowchart: approving an expense",
+  "description": "An expense claim is checked against a limit. Small claims are paid at once; larger ones go to a manager, who approves or refuses them.",
+  "nodes": [
+    { "id": "submit", "label": "SUBMIT CLAIM", "sub": "receipt attached", "at": [0, 0] },
+    { "id": "limit", "label": "UNDER £500?", "sub": "automatic check", "kind": "gate", "at": [3.4, 0] },
+    { "id": "pay", "label": "PAID", "sub": "in next payroll", "kind": "success", "at": [6.8, 0] },
+    { "id": "manager", "label": "MANAGER", "sub": "reviews the claim", "at": [3.4, 2.2] },
+    { "id": "refused", "label": "REFUSED", "sub": "sent back with reason", "kind": "fail", "at": [0, 2.2] }
+  ],
+  "edges": [
+    { "from": "submit", "to": "limit" },
+    { "from": "limit", "to": "pay", "kind": "pass", "label": "yes" },
+    { "from": "limit", "to": "manager", "label": "no" },
+    { "from": "manager", "to": "pay", "kind": "pass", "via": "xy", "label": "approved" },
+    { "from": "manager", "to": "refused", "kind": "fail", "label": "refused" }
+  ],
+  "steps": [
+    { "caption": "Someone submits an expense claim.", "show": ["submit"] },
+    { "caption": "Claims under £500 are checked automatically and paid.", "show": ["limit", "pay"], "pulse": ["submit>limit", "limit>pay"] },
+    { "caption": "Larger claims go to a manager.", "show": ["manager"], "focus": ["limit", "manager"], "pulse": ["limit>manager"] },
+    { "caption": "The manager approves the claim, or refuses it with a reason.", "show": ["refused"], "focus": ["manager", "pay", "refused"], "pulse": ["manager>pay", "manager>refused"] },
+    { "caption": "Two routes to being paid, one route to refusal." }
+  ]
+}
