@@ -94,10 +94,14 @@ layer. A group may contain other groups, so plates nest: a VPC plate holding a
 public-subnet plate and a private-subnet plate. Leave 2 between nodes whose
 plates are neighbours (columns 3.6 and 7.6), so the plates do not touch.
 
-**View.** `"view": "flat"` draws the same scene from straight above: layers
-become bands, top layer first, and lines between layers become ordinary
-arrows. Use flat for documents and simple flows, 3D (the default) when the
-point is layers. Check a spec both ways with `sp check x.json --view flat`.
+**View.** One spec draws three ways: `"view": "3d"` (default: perspective, and
+steps may turn and tilt the camera), `"iso"` (true isometric: fixed camera, no
+perspective; camera yaw and pitch in steps are ignored) or `"flat"` (from
+above; layers become bands). Use 3d for presenting and for layers, iso for the
+classic architecture-diagram look, flat for documents and simple flows. Wide
+rows shrink in iso, and many layers shrink in flat. Check all three with
+`sp check x.json --view iso` and `--view flat` if the deck will offer the
+view switcher.
 
 **Cloud diagrams.** Put the service name in `label` (`LAMBDA`, `S3`, `AURORA`)
 and what it does there in `sub`. Use plates for region, VPC and subnets. Use
@@ -113,7 +117,7 @@ icon colours.
 | `hide` | — | removes them again |
 | `focus` | this step | everything else dims |
 | `pulse` | this step | a dot travels along these edges |
-| `camera` | until changed | `yaw` (-45 to 45), `pitch` (25 to 70), `zoom`, `target` (ids to centre on, `null` to reset) |
+| `camera` | until changed | `yaw` (-45 to 45), `pitch` (25 to 70), `zoom`, `target` (ids to centre on, `null` to reset). Yaw and pitch apply in the 3d view only |
 | `callout` | this step | shows these callout ids (see below) |
 | `caption` | this step | one sentence under the scene, 84 characters at most |
 
@@ -158,7 +162,7 @@ the frame, change `side` or `gap`.
 ```
 
 Or put the JSON inline in a `<script type="application/json">` child, which
-works from `file://` with no server. Attributes: `toggle` (a button and the F key to switch flat and 3D), `notitle`, `icons="pack.json"`, `view="flat|iso"`, `theme="light|dark"` (default
+works from `file://` with no server. Attributes: `toggle` (a control and the F key to switch between 3D, isometric and flat), `notitle`, `icons="pack.json"`, `view="3d|iso|flat"`, `theme="light|dark"` (default
 follows the page's `data-theme`, then the system), `bare` (no background). The
 element has `next()`, `prev()`, `go(i)`, `restart()`, `setView(v)`, `toggleView()`, `step` and `stepCount`;
 `next()` returns `false` on the last step so the deck can move to its next

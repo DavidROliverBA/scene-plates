@@ -128,10 +128,13 @@ test('a row channel moves with its layer when drawn flat', async () => {
   const spec = await load('02-flow-complex.json');
   expect(validate(spec, 'flat')).toEqual([]);
 });
-test('the flat and 3D AWS examples are the same scene', async () => {
-  const [flat, iso] = [await load('05-aws-events-flat.json'), await load('06-aws-events-iso.json')];
-  expect({ ...flat, view: 0, title: 0, subtitle: 0 }).toEqual({ ...iso, view: 0, title: 0, subtitle: 0 } as any);
-  expect(flat.view).toBe('flat');
+test('the flat, isometric and 3D AWS examples are the same scene', async () => {
+  const [flat, iso, d3] = [await load('05-aws-events-flat.json'), await load('06-aws-events-iso.json'), await load('07-aws-events-3d.json')];
+  const same = (x: Spec) => ({ ...x, view: 0, title: 0, subtitle: 0 });
+  expect(same(flat)).toEqual(same(iso) as any);
+  expect(same(d3)).toEqual(same(iso) as any);
+  expect([flat.view, iso.view, d3.view]).toEqual(['flat', 'iso', '3d']);
+  for (const v of ['3d', 'iso', 'flat'] as const) expect(validate(iso, v)).toEqual([]);
 });
 test('a camera move that runs off the frame is refused', () => {
   const s = base();
@@ -199,7 +202,7 @@ test('a callout shows for its step only, and bad callouts are refused', () => {
 });
 test('switching view starts on one drawing, ends on the other, and never breaks between', async () => {
   const spec = await load('06-aws-events-iso.json');
-  const [iso, flat] = [compile(spec, 'iso'), compile(spec, 'flat')];
+  const [iso, flat] = [compile(spec, '3d'), compile(spec, 'flat')];
   expect(renderMorph(iso, flat, 0, { step: 5 })).toBe(renderFrame(iso, { step: 5, edgeAlpha: 1 }));
   expect(renderMorph(iso, flat, 1, { step: 5 })).toBe(renderFrame(flat, { step: 5, edgeAlpha: 1 }));
   for (let t = 0; t <= 1.0001; t += 0.05) {
@@ -214,4 +217,32 @@ test.skipIf(!existsSync(join(dir, '..', 'icons', 'aws.json')))('the AWS-icon exa
   const spec: Spec = await Bun.file(join(dir, 'with-aws-icons', 'aws-simple.json')).json();
   expect(validate(spec)).toEqual([]);
   expect(renderFrame(compile(spec))).toContain('<image');
+});
+
+test('three views: 3d has perspective and a free camera, iso and flat are fixed', () => {
+  const s = base(); s.camera = { yaw: 10, pitch: 50 }; s.steps = [{ show: ['a', 'b'] }, { camera: { yaw: 30, zoom: 1.2 } }];
+  const cam = (v: '3d' | 'iso' | 'flat', i: number) => compile(s, v).states[i].cam;
+  expect(cam('3d', 0)).toMatchObject({ yaw: 10, pitch: 50 });
+  expect(cam('3d', 0).persp).toBeGreaterThan(0);
+  expect(cam('3d', 1)).toMatchObject({ yaw: 30, zoom: 1.2 });
+  expect(cam('iso', 1)).toMatchObject({ yaw: 45, pitch: 35.264, persp: 0, zoom: 1.2 });
+  expect(cam('flat', 1)).toMatchObject({ yaw: 0, pitch: 90, persp: 0, zoom: 1.2 });
+  expect(compile(s).view).toBe('3d'); // the default
+  (s as any).view = 'sideways';
+  expect(has(validate(s), 'must be one of')).toBe(true);
+});
+test('in the 3d view nearer boxes are drawn larger; in iso they are the same size', () => {
+  const s = base(); s.nodes[1].at = [0, 4]; s.edges = [];
+  const widths = (v: '3d' | 'iso') => [...renderFrame(compile(s, v)).matchAll(/font-size="20" text-anchor="middle"[^>]*>|matrix\(([-\d.]+) /g)].map((m) => Number(m[1])).filter((n) => !Number.isNaN(n));
+  const iso = widths('iso'), d3 = widths('3d');
+  expect(new Set(iso.map((n) => n.toFixed(3))).size).toBe(1);
+  expect(new Set(d3.map((n) => n.toFixed(3))).size).toBeGreaterThan(1);
+});
+test('moving between 3d and iso keeps the lines on screen throughout', async () => {
+  const spec = await load('07-aws-events-3d.json');
+  const [d3, iso] = [compile(spec, '3d'), compile(spec, 'iso')];
+  const mid = renderMorph(d3, iso, 0.5, { step: 5 });
+  expect(mid).toContain('<polyline');
+  expect(mid).not.toContain('NaN');
+  expect(renderMorph(d3, iso, 1, { step: 5 })).toBe(renderFrame(iso, { step: 5, edgeAlpha: 1 }));
 });

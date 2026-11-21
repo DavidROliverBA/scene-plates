@@ -4,11 +4,11 @@
   "description": "People reach a serverless web app through CloudFront. Static pages come from S3; API calls go through API Gateway to a Lambda function that stores data in DynamoDB.",
   "nodes": [
     {"id": "users", "label": "PEOPLE", "sub": "browser or phone", "kind": "quiet", "at": [0, 0], "size": [2.6, 1], "icon": "user"},
-    {"id": "cdn", "label": "CLOUDFRONT", "sub": "one front door", "at": [4.2, 0], "size": [2.6, 1], "icon": "aws:cloudfront"},
-    {"id": "site", "label": "S3", "sub": "the static pages", "kind": "quiet", "at": [8.2, -2.2], "size": [2.6, 1], "icon": "aws:s3"},
-    {"id": "api", "label": "API GATEWAY", "sub": "checks each call", "kind": "gate", "at": [8.2, 0], "size": [2.6, 1], "icon": "aws:api-gateway"},
-    {"id": "fn", "label": "LAMBDA", "sub": "runs the logic", "at": [12.2, 0], "size": [2.6, 1], "icon": "aws:lambda"},
-    {"id": "table", "label": "DYNAMODB", "sub": "keeps the data", "kind": "success", "at": [12.2, 2.2], "size": [2.6, 1], "icon": "aws:dynamodb", "shape": "cylinder"}
+    {"id": "cdn", "label": "CLOUDFRONT", "sub": "one front door", "at": [3.8, 0], "size": [2.6, 1], "icon": "aws:cloudfront"},
+    {"id": "site", "label": "S3", "sub": "the static pages", "kind": "quiet", "at": [7.5, -2.2], "size": [2.6, 1], "icon": "aws:s3"},
+    {"id": "api", "label": "API GATEWAY", "sub": "checks each call", "kind": "gate", "at": [7.5, 0], "size": [2.6, 1], "icon": "aws:api-gateway"},
+    {"id": "fn", "label": "LAMBDA", "sub": "runs the logic", "at": [11.2, 0], "size": [2.6, 1], "icon": "aws:lambda"},
+    {"id": "table", "label": "DYNAMODB", "sub": "keeps the data", "kind": "success", "at": [11.2, 2.2], "size": [2.6, 1], "icon": "aws:dynamodb", "shape": "cylinder"}
   ],
   "groups": [
     {"id": "aws", "label": "AWS  eu-west-2", "contains": ["cdn", "site", "api", "fn", "table"]}

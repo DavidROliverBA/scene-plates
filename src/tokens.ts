@@ -36,7 +36,7 @@ export const tokens = {
   text: { label: 0.2, sub: 0.135, edge: 0.14, plate: 0.15 },
   charWidth: 0.6, // monospace advance, as a fraction of font size
   plateSpacing: 0.06, // extra space between the letters of a plate label
-  minScale: 64, // px per unit; below this labels are too small to read on a slide
+  minScale: 56, // px per unit; below this labels (11px on a 1280 frame, 17px on full HD) are too small for a slide
   maxScale: 125,
 
   font: {
@@ -49,7 +49,9 @@ export const tokens = {
   dash: { fail: '8 6', quiet: '2 5' },
 
   // Default camera, and the range in which labels stay readable.
-  camera: { yaw: 22, pitch: 38, zoom: 1, yawRange: [-45, 45], pitchRange: [25, 70], zoomRange: [0.6, 2.2] },
+  // persp is 1 / camera distance in grid units: 0 is no perspective, bigger is stronger.
+  isometric: { yaw: 45, pitch: 35.264 }, // the one true isometric angle
+  camera: { yaw: 22, pitch: 38, zoom: 1, persp: 0.03, yawRange: [-45, 45], pitchRange: [25, 70], zoomRange: [0.6, 2.2] },
 
   // Motion. Every move uses these and only these.
   motion: { step: 750, drop: 0.7, pulse: 1700, dim: 0.2, morph: 1400 },

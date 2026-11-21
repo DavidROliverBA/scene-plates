@@ -5,7 +5,7 @@
 
 import { mkdirSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
-import type { Spec, View } from './spec';
+import { VIEWS, type Spec, type View } from './spec';
 import type { ThemeName } from './tokens';
 import { compile } from './scene';
 import { renderFrame } from './render';
@@ -25,7 +25,7 @@ for (let i = 0; i < rest.length; i++) {
 }
 
 const view = flags.view as View | undefined;
-if (view && view !== 'iso' && view !== 'flat') fail('--view must be iso or flat');
+if (view && !VIEWS.includes(view)) fail(`--view must be one of ${VIEWS.join(', ')}`);
 
 async function load(path: string): Promise<Spec> {
   let spec: Spec;
@@ -41,13 +41,13 @@ async function load(path: string): Promise<Spec> {
   return spec!;
 }
 function fail(msg: string): never { console.error(msg); process.exit(1); }
-const usage = () => fail('Usage:\n  scene-plates check <spec.json>...\n  scene-plates svg <spec.json> [--step N | --all] [--theme light|dark] [--view iso|flat] [-o file-or-folder]\n  scene-plates html <spec.json>... -o deck.html [--no-toggle]\nAny command: --icons pack.json');
+const usage = () => fail('Usage:\n  scene-plates check <spec.json>...\n  scene-plates svg <spec.json> [--step N | --all] [--theme light|dark] [--view 3d|iso|flat] [-o file-or-folder]\n  scene-plates html <spec.json>... -o deck.html [--no-toggle]\nAny command: --icons pack.json');
 
 if (!cmd || !files.length) usage();
 if (flags.icons) registerIcons(await Bun.file(flags.icons as string).json());
 
 if (cmd === 'check') {
-  for (const p of files) { const s = await load(p); console.log(`ok  ${p}  (${s.nodes.length} nodes, ${(s.steps ?? []).length || 1} steps, ${view ?? s.view ?? 'iso'})`); }
+  for (const p of files) { const s = await load(p); console.log(`ok  ${p}  (${s.nodes.length} nodes, ${(s.steps ?? []).length || 1} steps, ${view ?? s.view ?? '3d'})`); }
 } else if (cmd === 'svg') {
   const spec = await load(files[0]), scene = compile(spec, view);
   const theme = (flags.theme as ThemeName) ?? 'light';
@@ -90,7 +90,7 @@ scene-plate{display:block;width:min(100%,calc((100vh - 40px)*16/9));cursor:point
 @media print{.slide{display:flex;height:auto;break-after:page}.hint,button{display:none}}
 </style></head><body>
 ${slides}
-<div class="hint">Right arrow, space or click: next step. Left arrow: back.${toggle ? ' F: flat or 3D.' : ''}</div>
+<div class="hint">Right arrow, space or click: next step. Left arrow: back.${toggle ? ' F: 3D, isometric or flat.' : ''}</div>
 ${icons}<script>${js}</script>
 <script>
 (function(){

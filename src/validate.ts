@@ -2,10 +2,10 @@
 // an empty list means the scene is safe to render.
 
 import { tokens as T } from './tokens';
-import { EDGE_KINDS, NODE_KINDS, type CameraSpec, type Spec, type View } from './spec';
+import { EDGE_KINDS, NODE_KINDS, VIEWS, type CameraSpec, type Spec, type View } from './spec';
 import { edgeId, textArea, type Box, type LEdge } from './layout';
 import { builtinIcons, hasIcon } from './icons';
-import { calloutBox, compile, frameBox, projector } from './scene';
+import { calloutBox, centre, compile, frameBox, lens, projector } from './scene';
 
 type Rect = [number, number, number, number];
 const EPS = 0.02;
@@ -72,7 +72,7 @@ export function validate(spec: Spec, view?: View): string[] {
     }
     if (n.layer !== undefined && (!Number.isInteger(n.layer) || n.layer < 0)) bad(`Node "${n.id}" layer must be a whole number, 0 or more.`);
   }
-  if (spec.view && spec.view !== 'iso' && spec.view !== 'flat') bad(`"view" must be "iso" or "flat".`);
+  if (spec.view && !VIEWS.includes(spec.view)) bad(`"view" must be one of ${VIEWS.join(', ')}.`);
   const groupIds = new Set((spec.groups ?? []).map((g) => g.id)), parent = new Map<string, string>();
   for (const g of spec.groups ?? []) {
     claim(g.id, 'Group');
@@ -136,8 +136,10 @@ export function validate(spec: Spec, view?: View): string[] {
   // --- Geometry ----------------------------------------------------------
   const scene = compile(spec, view), { model } = scene;
 
-  if (scene.fit.scale < T.minScale) {
-    bad(`The scene is too big for one slide: labels would be about ${Math.round(scene.fit.scale * T.text.label)}px on a 1280px frame. Split it into two scenes or move nodes closer.`);
+  // With perspective, the furthest box is the smallest; that is the one that must stay readable.
+  const far = lens(scene.states[0].cam, scene.fit.anchor), smallest = scene.fit.scale * Math.min(...model.nodes.map((n) => far.k(centre(n.box))));
+  if (smallest < T.minScale) {
+    bad(`The scene is too big for one slide in the ${model.view} view: the smallest labels would be about ${Math.round(smallest * T.text.label)}px on a 1280px frame. Split it into two scenes or move nodes closer.`);
   }
   for (const n of model.nodes) {
     const room = textArea(n).room;

@@ -3,7 +3,7 @@
 
 import { tokens as T, type ThemeName } from './tokens';
 import { textArea, type Box, type LCallout, type LEdge, type LGroup, type LNode, type Vec3 } from './layout';
-import { alphas, calloutBox, targetPoint, view, type Scene, type StepState } from './scene';
+import { alphas, calloutBox, lens, targetPoint, type Scene, type StepState } from './scene';
 import { iconImage, iconPath } from './icons';
 
 export interface FrameOpts {
@@ -44,7 +44,6 @@ export function renderFrame(scene: Scene, o: FrameOpts = {}): string {
 
   // Camera: blend angle, zoom, the point we look at and where it sits on screen.
   const c0 = (prev ?? cur).cam, c1 = cur.cam;
-  const v = view(lerp(c0.yaw, c1.yaw, e), lerp(c0.pitch, c1.pitch, e));
   const S = fit.scale * lerp(c0.zoom, c1.zoom, e);
   const look = (c: typeof c0) => {
     const t = c.target ? targetPoint(model, c.target) : null;
@@ -53,17 +52,19 @@ export function renderFrame(scene: Scene, o: FrameOpts = {}): string {
   const [l0, l1] = [look(c0), look(c1)];
   const A: Vec3 = [0, 1, 2].map((i) => lerp(l0.a[i], l1.a[i], e)) as Vec3;
   const AS = [lerp(l0.s[0], l1.s[0], e), lerp(l0.s[1], l1.s[1], e)];
-  const pa = v.p(A);
+  const L = lens({ yaw: lerp(c0.yaw, c1.yaw, e), pitch: lerp(c0.pitch, c1.pitch, e), persp: lerp(c0.persp, c1.persp, e) }, A), v = L.v;
   const P = (p: Vec3): [number, number] => {
-    const q = v.p(p);
-    return [AS[0] + S * (q[0] - pa[0]), AS[1] + S * (q[1] - pa[1])];
+    const r = L.r(p);
+    return [AS[0] + S * r[0], AS[1] + S * r[1]];
   };
   const poly = (pts: Vec3[]) => pts.map((p) => P(p).map(f).join(',')).join(' ');
   const pts2 = (pts: [number, number][]) => pts.map((p) => p.map(f).join(',')).join(' ');
 
   // Things lying flat on a horizontal face. "scale" is local units per world unit.
+  // With perspective this is the flat-face fit at that one point, which is close
+  // enough over the width of a label.
   const faceMatrix = (at: Vec3, scale: number) => {
-    const [x, y] = P(at), k = S / scale;
+    const [x, y] = P(at), k = (S * L.k(at)) / scale;
     return [v.ux[0] * k, v.ux[1] * k, v.uy[0] * k, v.uy[1] * k, x, y].map((n) => n.toFixed(4)).join(' ');
   };
   const flat = (at: Vec3, text: string, size: number, fill: string, anchor: string, extra = '') =>
@@ -162,8 +163,10 @@ export function renderFrame(scene: Scene, o: FrameOpts = {}): string {
     const dash = ed.kind === 'fail' ? T.dash.fail : ed.kind === 'quiet' ? T.dash.quiet : null;
     let pts = ed.pts, head = '';
     if (ed.riser) {
-      const m = P(along(pts, 0.5)), up = pts[1][2] > pts[0][2] ? -1 : 1;
-      head = `<polygon points="${f(m[0])},${f(m[1] + up * 8)} ${f(m[0] - 6)},${f(m[1] - up * 5)} ${f(m[0] + 6)},${f(m[1] - up * 5)}" fill="${col}"/>`;
+      // The arrowhead sits half-way and points along the line as it appears on screen.
+      const m = P(along(pts, 0.5)), [s0, s1] = [P(pts[0]), P(pts[1])], sl = Math.hypot(s1[0] - s0[0], s1[1] - s0[1]) || 1;
+      const dx = (s1[0] - s0[0]) / sl, dy = (s1[1] - s0[1]) / sl;
+      head = `<polygon points="${pts2([[m[0] + dx * 8, m[1] + dy * 8], [m[0] - dx * 5 - dy * 6, m[1] - dy * 5 + dx * 6], [m[0] - dx * 5 + dy * 6, m[1] - dy * 5 - dx * 6]])}" fill="${col}"/>`;
     } else {
       const n = pts.length, [t, u] = [pts[n - 1], pts[n - 2]];
       const len = Math.hypot(t[0] - u[0], t[1] - u[1]) || 1;
@@ -191,7 +194,7 @@ export function renderFrame(scene: Scene, o: FrameOpts = {}): string {
       const lc = ed.kind === 'flow' ? th.muted : col;
       if (ed.riser) {
         const m = P(ed.label.at), dx = ed.label.anchor === 'end' ? -14 : 14;
-        s += `<text x="${f(m[0] + dx)}" y="${f(m[1] + 4)}" font-size="${f(T.text.edge * S)}" text-anchor="${ed.label.anchor}" fill="${lc}" stroke="${th.bg}" stroke-width="3.5" paint-order="stroke">${esc(ed.spec.label)}</text>`;
+        s += `<text x="${f(m[0] + dx)}" y="${f(m[1] + 4)}" font-size="${f(T.text.edge * S * L.k(ed.label.at))}" text-anchor="${ed.label.anchor}" fill="${lc}" stroke="${th.bg}" stroke-width="3.5" paint-order="stroke">${esc(ed.spec.label)}</text>`;
       } else {
         s += flat(ed.label.at, ed.spec.label, T.text.edge, lc, ed.label.anchor);
       }
@@ -254,24 +257,28 @@ export function renderFrame(scene: Scene, o: FrameOpts = {}): string {
   );
 }
 
-// Switching between the 3D and flat drawings of one spec: lines fade out, the
+// Switching between two drawings of one spec. Between 3d and iso only the
+// camera moves. To or from flat the layout changes too, so lines fade out, the
 // boxes and the camera move across, then the other drawing's lines fade in.
 export function renderMorph(a: Scene, b: Scene, t: number, o: FrameOpts = {}): string {
   const settled = { ...o, progress: 1, from: undefined };
   if (o.reducedMotion) return renderFrame(t < 0.5 ? a : b, settled);
-  if (t <= 0.22) return renderFrame(a, { ...settled, edgeAlpha: 1 - t / 0.22 });
-  if (t >= 0.78) return renderFrame(b, { ...settled, edgeAlpha: clamp((t - 0.78) / 0.22, 0, 1) });
-  const m = ease((t - 0.22) / 0.56), ref = a.model.flat ? b : a; // draw order comes from the 3D model
+  const sameLayout = !a.model.flat && !b.model.flat;
+  if (t <= 0) return renderFrame(a, { ...settled, edgeAlpha: 1 });
+  if (t >= 1) return renderFrame(b, { ...settled, edgeAlpha: 1 });
+  if (!sameLayout && t <= 0.22) return renderFrame(a, { ...settled, edgeAlpha: 1 - t / 0.22 });
+  if (!sameLayout && t >= 0.78) return renderFrame(b, { ...settled, edgeAlpha: clamp((t - 0.78) / 0.22, 0, 1) });
+  const m = sameLayout ? ease(t) : ease((t - 0.22) / 0.56), ref = a.model.flat ? b : a; // draw order comes from a model with layers
   const v3 = (p: Vec3, q: Vec3): Vec3 => [lerp(p[0], q[0], m), lerp(p[1], q[1], m), lerp(p[2], q[2], m)];
   const v2 = (p: [number, number], q: [number, number]): [number, number] => [lerp(p[0], q[0], m), lerp(p[1], q[1], m)];
   const between: Scene = {
     ...a,
     model: {
-      ...ref.model, flat: false, edges: [], callouts: [],
+      ...ref.model, flat: false, ...(sameLayout ? {} : { edges: [], callouts: [] }),
       nodes: ref.model.nodes.map((n) => ({ ...n, box: lerpBox(a.model.byId.get(n.id)!.box, b.model.byId.get(n.id)!.box, m) })),
       groups: ref.model.groups.map((g) => ({ ...g, box: lerpBox(a.model.groups.find((x) => x.id === g.id)!.box, b.model.groups.find((x) => x.id === g.id)!.box, m) })),
     },
-    states: a.states.map((s, i) => ({ ...s, cam: { ...s.cam, yaw: lerp(s.cam.yaw, b.states[i].cam.yaw, m), pitch: lerp(s.cam.pitch, b.states[i].cam.pitch, m) } })),
+    states: a.states.map((s, i) => ({ ...s, cam: { ...s.cam, yaw: lerp(s.cam.yaw, b.states[i].cam.yaw, m), pitch: lerp(s.cam.pitch, b.states[i].cam.pitch, m), persp: lerp(s.cam.persp, b.states[i].cam.persp, m) } })),
     fit: {
       scale: lerp(a.fit.scale, b.fit.scale, m), anchor: v3(a.fit.anchor, b.fit.anchor),
       anchorScreen: v2(a.fit.anchorScreen, b.fit.anchorScreen), centre: v2(a.fit.centre, b.fit.centre),

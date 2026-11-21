@@ -60,11 +60,15 @@ export interface StepSpec {
   camera?: CameraSpec; // stays until changed
 }
 
-export type View = 'iso' | 'flat';
+// 3d: perspective, with a camera the steps can turn and tilt (the default).
+// iso: true isometric, a fixed camera with no perspective.
+// flat: straight down, layers laid out as bands.
+export type View = '3d' | 'iso' | 'flat';
+export const VIEWS: View[] = ['3d', 'iso', 'flat'];
 
 export interface Spec {
   title: string;
-  view?: View; // iso (default) is the 3D view; flat is the same scene seen from straight above
+  view?: View; // which drawing to start with; default 3d
   subtitle?: string;
   description: string; // read out by screen readers: say what the diagram shows
   callouts?: CalloutSpec[];

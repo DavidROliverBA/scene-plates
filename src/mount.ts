@@ -2,7 +2,7 @@
 // Bundled into dist/scene-plates.min.js, which defines <scene-plate> and a
 // global ScenePlates.
 
-import type { Spec, View } from './spec';
+import { VIEWS, type Spec, type View } from './spec';
 import { tokens as T, type ThemeName } from './tokens';
 import { compile, type Scene } from './scene';
 import { renderFrame, renderMorph } from './render';
@@ -15,7 +15,7 @@ export interface MountOpts {
   keys?: boolean;
   view?: View;
   title?: boolean; // false leaves the title out, for slides with their own heading
-  toggle?: boolean; // show a button that switches between 3D and flat
+  toggle?: boolean; // show a control that switches between 3D, isometric and flat
 }
 export interface Controller {
   readonly step: number;
@@ -26,15 +26,15 @@ export interface Controller {
   go(i: number): boolean;
   restart(atEnd?: boolean): void; // replay the entrance; atEnd jumps to the last step
   setView(v: View): boolean; // false when the scene cannot be drawn that way
-  toggleView(): boolean;
+  toggleView(): boolean; // moves to the next view the scene can be drawn in
   destroy(): void;
 }
 
-const other = (v: View): View => (v === 'flat' ? 'iso' : 'flat');
+const NAMES: Record<View, string> = { '3d': '3D', iso: 'Isometric', flat: 'Flat' };
 
 export function mount(el: HTMLElement, spec: Spec, opts: MountOpts = {}): Controller {
   const showTitle = opts.title !== false;
-  let view: View = opts.view ?? spec.view ?? 'iso';
+  let view: View = opts.view ?? spec.view ?? '3d';
   const errs = validate(spec, view);
   if (errs.length) {
     const pre = document.createElement('pre');
@@ -43,7 +43,7 @@ export function mount(el: HTMLElement, spec: Spec, opts: MountOpts = {}): Contro
     el.replaceChildren(pre);
     return { step: 0, stepCount: 0, view, next: () => false, prev: () => false, go: () => false, restart() {}, setView: () => false, toggleView: () => false, destroy() {} };
   }
-  // One compiled scene per view; the other view is built the first time it is asked for.
+  // One compiled scene per view; the others are built the first time they are asked for.
   const scenes: Partial<Record<View, Scene | null>> = { [view]: compile(spec, view, showTitle) };
   const sceneFor = (v: View): Scene | null => {
     if (scenes[v] === undefined) scenes[v] = validate(spec, v).length ? null : compile(spec, v, showTitle);
@@ -57,7 +57,9 @@ export function mount(el: HTMLElement, spec: Spec, opts: MountOpts = {}): Contro
 
   const stage = document.createElement('div');
   el.replaceChildren(stage);
-  let button: HTMLButtonElement | null = null;
+  let bar: HTMLDivElement | null = null;
+  const usable = () => VIEWS.filter((v) => sceneFor(v));
+  const nextView = (): View => { const u = usable(); return u[(u.indexOf(view) + 1) % u.length]; };
 
   const theme = (): ThemeName => {
     if (opts.theme && opts.theme !== 'auto') return opts.theme;
@@ -65,10 +67,14 @@ export function mount(el: HTMLElement, spec: Spec, opts: MountOpts = {}): Contro
     return set === 'dark' || set === 'light' ? set : dark.matches ? 'dark' : 'light';
   };
   const dress = () => {
-    if (!button) return;
+    if (!bar) return;
     const th = T.themes[theme()];
-    button.textContent = view === 'flat' ? '3D view' : 'Flat view';
-    button.style.cssText = `position:absolute;top:2.2%;right:1.6%;font:500 12px ${T.font.caption};padding:5px 11px;border-radius:999px;cursor:pointer;background:${th.surface};color:${th.muted};border:1px solid ${th.plateStroke}`;
+    bar.style.cssText = `position:absolute;top:2.2%;right:1.6%;display:flex;border-radius:999px;overflow:hidden;border:1px solid ${th.plateStroke};background:${th.surface}`;
+    for (const b of bar.querySelectorAll('button')) {
+      const on = b.dataset.view === view;
+      b.setAttribute('aria-pressed', String(on));
+      b.style.cssText = `font:500 12px ${T.font.caption};padding:5px 11px;border:0;cursor:pointer;background:${on ? th.ink : 'transparent'};color:${on ? th.bg : th.muted}`;
+    }
   };
   const draw = (now: number) => {
     const reduced = still.matches, base = { step, theme: theme(), reducedMotion: reduced, bare: opts.bare, time: now };
@@ -106,15 +112,20 @@ export function mount(el: HTMLElement, spec: Spec, opts: MountOpts = {}): Contro
     return true;
   };
 
-  if (opts.toggle && sceneFor(other(view))) {
+  if (opts.toggle && usable().length > 1) {
     if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
-    button = document.createElement('button');
-    button.type = 'button';
-    button.title = 'Switch between the 3D and flat drawing (F)';
-    button.addEventListener('click', (e) => { e.stopPropagation(); setView(other(view)); });
-    // Space and Enter press the button; they must not also advance the scene. Arrows pass through.
-    button.addEventListener('keydown', (e) => { if (e.key === ' ' || e.key === 'Enter') e.stopPropagation(); });
-    el.append(button);
+    bar = document.createElement('div');
+    bar.setAttribute('role', 'group');
+    bar.setAttribute('aria-label', 'View (F switches)');
+    for (const v of usable()) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.dataset.view = v; b.textContent = NAMES[v];
+      b.addEventListener('click', (e) => { e.stopPropagation(); setView(v); });
+      // Space and Enter press the button; they must not also advance the scene. Arrows pass through.
+      b.addEventListener('keydown', (e) => { if (e.key === ' ' || e.key === 'Enter') e.stopPropagation(); });
+      bar.append(b);
+    }
+    el.append(bar);
     dress();
   }
 
@@ -127,7 +138,7 @@ export function mount(el: HTMLElement, spec: Spec, opts: MountOpts = {}): Contro
   io.observe(el);
 
   const onKey = (e: KeyboardEvent) => {
-    if (e.key === 'f' || e.key === 'F') { if (setView(other(view))) { e.preventDefault(); e.stopPropagation(); } return; }
+    if (e.key === 'f' || e.key === 'F') { if (usable().length > 1 && setView(nextView())) { e.preventDefault(); e.stopPropagation(); } return; }
     const fwd = e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown', back = e.key === 'ArrowLeft' || e.key === 'PageUp';
     if ((fwd && go(step + 1)) || (back && go(step - 1))) { e.preventDefault(); e.stopPropagation(); }
   };
@@ -143,7 +154,7 @@ export function mount(el: HTMLElement, spec: Spec, opts: MountOpts = {}): Contro
     get stepCount() { return last + 1; },
     get view() { return view; },
     next: () => go(step + 1), prev: () => go(step - 1), go, restart, setView,
-    toggleView: () => setView(other(view)),
+    toggleView: () => usable().length > 1 && setView(nextView()),
     destroy() { cancelAnimationFrame(raf); io.disconnect(); el.removeEventListener('keydown', onKey); el.removeEventListener('click', onClick); dark.removeEventListener('change', repaint); still.removeEventListener('change', kick); },
   };
 }
@@ -177,7 +188,7 @@ if (typeof customElements !== 'undefined' && !customElements.get('scene-plate'))
     disconnectedCallback() { this.ctl?.destroy(); this.ctl = undefined; }
     get step() { return this.ctl?.step ?? 0; }
     get stepCount() { return this.ctl?.stepCount ?? 0; }
-    get view() { return this.ctl?.view ?? 'iso'; }
+    get view() { return this.ctl?.view ?? '3d'; }
     next() { return this.ctl?.next() ?? false; }
     prev() { return this.ctl?.prev() ?? false; }
     go(i: number) { return this.ctl?.go(i) ?? false; }

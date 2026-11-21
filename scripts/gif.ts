@@ -15,7 +15,7 @@ import { registerIcons } from '../src/icons';
 const args = process.argv.slice(2);
 const opt = (name: string, d: string) => { const i = args.indexOf(name); return i >= 0 ? args.splice(i, 2)[1] : d; };
 const theme = opt('--theme', 'light') as ThemeName, width = opt('--width', '960');
-const view = (opt('--view', '') || undefined) as 'iso' | 'flat' | undefined;
+const view = (opt('--view', '') || undefined) as '3d' | 'iso' | 'flat' | undefined;
 const iconPack = opt('--icons', '');
 if (iconPack) registerIcons(await Bun.file(iconPack).json());
 const [specPath, outPath] = args;

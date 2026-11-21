@@ -14,12 +14,12 @@ camera and the animation. Because no one writes drawing code per diagram:
   graphics code, and an edit is a few changed lines.
 - **Bad diagrams are refused.** A checker rejects overlapping boxes, crossing
   lines, labels that do not fit, text too small to read, and loops with no cap.
-- **Nothing to install on the page.** One 40 KB script, no other libraries, no
+- **Nothing to install on the page.** One 41 KB script, no other libraries, no
   network. It also renders stills and GIFs from the command line.
 
-It is a parallel-projection 3D view drawn as SVG, not WebGL. That keeps text
-sharp at any size and lets the same code run in a browser and in a terminal.
-The camera can turn and tilt within the range where labels stay readable.
+It draws 3D as SVG, not WebGL. That keeps text sharp at any size and lets the
+same code run in a browser and in a terminal. Each scene can be shown in
+perspective 3D, true isometric, or flat.
 
 ## Try it
 
@@ -42,28 +42,35 @@ open deck.html                                      # arrows, space or click
 | `02-flow-complex` | ten boxes, two plates, two capped loops, a zoom onto one part |
 | `03-aws-simple` | a serverless web app on one layer |
 | `04-aws-landscape` | three layers, with a VPC plate holding public and private subnets |
-| `05-aws-events-flat`, `06-aws-events-iso` | the same scene drawn flat and in 3D |
-| `07-request-flow`, `08-agent-loop` | two layers with a fail path; a loop with a cap |
+| `05-aws-events-flat`, `06-aws-events-iso`, `07-aws-events-3d` | the same scene in each of the three views |
+| `08-request-flow`, `09-agent-loop` | two layers with a fail path; a loop with a cap |
 
-## Flat or 3D from one spec
+## Three views from one spec
 
-Add `"view": "flat"` and the scene is drawn from straight above. Layers become
-bands, top layer first, and lines between layers become ordinary arrows. Any
-spec can be drawn either way: `--view flat` on the command line, or
-`<scene-plate view="flat">` on a page.
+| View | What it is | Good for |
+|---|---|---|
+| `3d` (default) | perspective, with a camera the steps can turn and tilt | presenting; showing layers |
+| `iso` | true isometric: a fixed 45 degree camera and no perspective, so equal lengths stay equal | the classic architecture-diagram look; print |
+| `flat` | straight down; layers become bands, top layer first | documents; simple flows |
 
-| Flat | 3D |
-|---|---|
-| ![The event-driven scene drawn flat](docs/aws-events-flat.png) | ![The same scene in 3D](docs/aws-events-iso.png) |
+Set `"view"` in the spec, `--view` on the command line, or `view="iso"` on the
+tag. Any spec can be drawn all three ways.
 
-Stacking is what 3D buys: the three-layer landscape above fits a slide in 3D
-and is refused as too small to read when drawn flat.
+| Flat | Isometric | 3D |
+|---|---|---|
+| ![Drawn flat](docs/aws-events-flat.png) | ![Drawn in isometric](docs/aws-events-iso.png) | ![Drawn in 3D](docs/aws-events-3d.png) |
 
-Add the `toggle` attribute and the scene gets a small button (and the F key)
-that switches between the two while you present. Lines fade out, the boxes and
-camera move across, and the other drawing's lines fade in. The button only
-appears when the scene passes the checker both ways. Decks made with
+Add the `toggle` attribute and the scene gets a small 3D / Isometric / Flat
+control (and the F key) to move between them while you present. Between 3D
+and isometric only the camera moves. To or from flat the layout changes, so
+lines fade out, the boxes move across, and the other view's lines fade in.
+The control offers only the views that pass the checker. Decks made with
 `html` have it on; `--no-toggle` leaves it off.
+
+Each view suits a different shape of scene. Isometric turns a long row into a
+long diagonal, so wide scenes come out smaller; flat cannot stack, so
+many-layered scenes come out smaller. The three-layer landscape above passes
+only in 3D.
 
 ## Icons, cylinders, titles and callouts
 
@@ -160,7 +167,7 @@ its own slide. It follows the system light or dark setting unless you set
 ```sh
 bun src/cli.ts svg spec.json --all -o out/           # one still per step
 bun src/cli.ts svg spec.json --step 3 --theme dark   # one still to stdout
-bun src/cli.ts check spec.json --view flat           # would it also work flat?
+bun src/cli.ts check spec.json --view iso            # would it also work in isometric?
 bun scripts/gif.ts spec.json out.gif                 # needs rsvg-convert and ffmpeg
 ```
 

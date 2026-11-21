@@ -4,7 +4,7 @@ import { tokens as T } from './tokens';
 import type { Spec, View } from './spec';
 import { buildModel, type Box, type LCallout, type Model, type Vec3 } from './layout';
 
-export interface Cam { yaw: number; pitch: number; zoom: number; target: string[] | null }
+export interface Cam { yaw: number; pitch: number; zoom: number; persp: number; target: string[] | null }
 export interface StepState {
   visible: Set<string>; // node ids, plus held edges that have been shown
   focus: Set<string> | null;
@@ -14,7 +14,7 @@ export interface StepState {
   caption: string;
 }
 export interface Scene {
-  spec: Spec; model: Model; states: StepState[]; showTitle: boolean;
+  spec: Spec; model: Model; states: StepState[]; showTitle: boolean; view: View;
   fit: { scale: number; anchor: Vec3; anchorScreen: [number, number]; centre: [number, number] };
 }
 
@@ -34,6 +34,16 @@ function view_(yawDeg: number, pitchDeg: number) {
   };
 }
 
+// A camera looking at an anchor point. r() gives a point's place relative to the
+// anchor, in grid units on screen; k() is how much perspective shrinks or grows
+// things at that point (always 1 with no perspective).
+export function lens(cam: { yaw: number; pitch: number; persp: number }, anchor: Vec3) {
+  const v = view_(cam.yaw, cam.pitch), pa = v.p(anchor), fa = v.far(anchor);
+  const k = (p: Vec3) => 1 / Math.max(0.3, 1 + cam.persp * (v.far(p) - fa));
+  const r = (p: Vec3): [number, number] => { const q = v.p(p), s = k(p); return [(q[0] - pa[0]) * s, (q[1] - pa[1]) * s]; };
+  return { v, k, r };
+}
+
 export const corners = (b: Box): Vec3[] =>
   [b.x0, b.x1].flatMap((x) => [b.y0, b.y1].flatMap((y) => [b.z0, b.z1].map((z) => [x, y, z] as Vec3)));
 export const centre = (b: Box): Vec3 => [(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, (b.z0 + b.z1) / 2];
@@ -51,10 +61,13 @@ export function targetPoint(model: Model, ids: string[]): Vec3 | null {
   return [span(0), span(1), span(2)];
 }
 
-function baseCam(spec: Spec, flat: boolean): Cam {
+// Only the 3d view lets the spec turn and tilt the camera; iso and flat are fixed by definition.
+const fixed = (view: View) => (view === 'flat' ? { yaw: 0, pitch: 90 } : view === 'iso' ? T.isometric : null);
+function baseCam(spec: Spec, view: View): Cam {
+  const f = fixed(view);
   return {
-    yaw: flat ? 0 : spec.camera?.yaw ?? T.camera.yaw, pitch: flat ? 90 : spec.camera?.pitch ?? T.camera.pitch,
-    zoom: spec.camera?.zoom ?? T.camera.zoom, target: spec.camera?.target ?? null,
+    yaw: f?.yaw ?? spec.camera?.yaw ?? T.camera.yaw, pitch: f?.pitch ?? spec.camera?.pitch ?? T.camera.pitch,
+    zoom: spec.camera?.zoom ?? T.camera.zoom, persp: f ? 0 : T.camera.persp, target: spec.camera?.target ?? null,
   };
 }
 
@@ -65,19 +78,20 @@ export function buildStates(spec: Spec, model: Model): StepState[] {
   if (!steps.length) {
     return [{
       visible: new Set([...model.nodes.map((n) => n.id), ...model.edges.map((e) => e.id)]),
-      focus: null, pulse: new Set(), callout: new Set(model.callouts.map((c) => c.id)), cam: baseCam(spec, model.flat), caption: '',
+      focus: null, pulse: new Set(), callout: new Set(model.callouts.map((c) => c.id)), cam: baseCam(spec, model.view), caption: '',
     }];
   }
   const out: StepState[] = [];
   const visible = new Set<string>();
-  let cam = baseCam(spec, model.flat);
+  let cam = baseCam(spec, model.view);
+  const f = fixed(model.view);
   for (const s of steps) {
     for (const id of expand(s.show)) visible.add(id);
     for (const id of expand(s.hide)) visible.delete(id);
     if (s.camera) {
       cam = {
-        // Flat scenes ignore turning and tilting; zoom and target still apply.
-        yaw: model.flat ? 0 : s.camera.yaw ?? cam.yaw, pitch: model.flat ? 90 : s.camera.pitch ?? cam.pitch, zoom: s.camera.zoom ?? cam.zoom,
+        // Fixed views ignore turning and tilting; zoom and target still apply.
+        ...cam, yaw: f?.yaw ?? s.camera.yaw ?? cam.yaw, pitch: f?.pitch ?? s.camera.pitch ?? cam.pitch, zoom: s.camera.zoom ?? cam.zoom,
         target: s.camera.target === undefined ? cam.target : s.camera.target,
       };
     }
@@ -92,25 +106,22 @@ export function buildStates(spec: Spec, model: Model): StepState[] {
 export function compile(spec: Spec, view?: View, showTitle = true): Scene {
   const model = buildModel(spec, view);
   const states = buildStates(spec, model);
-  // Fit the whole scene once, at the base camera. The scale never changes after
-  // that except by an explicit zoom, so nothing "breathes" as the camera turns.
-  const cam = baseCam(spec, model.flat), v = view_(cam.yaw, cam.pitch), F = T.frame;
+  // Fit the whole scene once. The scale never changes after that except by an
+  // explicit zoom, so nothing "breathes" as the camera turns.
+  const cam = baseCam(spec, model.view), F = T.frame;
   const top = showTitle && spec.title ? (spec.subtitle ? T.title.bandSub : T.title.band) : F.marginTop;
   const availW = F.w - 2 * F.marginX, availH = F.h - top - F.captionBand;
-  const span = (c: { yaw: number; pitch: number }) => {
-    const q = corners(model.bounds).map(view_(c.yaw, c.pitch).p), x = q.map((p) => p[0]), y = q.map((p) => p[1]);
-    return [Math.max(Math.max(...x) - Math.min(...x), 0.001), Math.max(Math.max(...y) - Math.min(...y), 0.001)];
+  const anchor = centre(model.bounds);
+  const box = (c: Cam) => {
+    const q = corners(model.bounds).map(lens(c, anchor).r), x = q.map((p) => p[0]), y = q.map((p) => p[1]);
+    return { x0: Math.min(...x), x1: Math.max(...x), y0: Math.min(...y), y1: Math.max(...y) };
   };
   // The scale that still fits at every camera angle the steps use.
-  const scale = Math.min(T.maxScale, ...[cam, ...states.map((s) => s.cam)].map((c) => { const [w, h] = span(c); return Math.min(availW / w, availH / h); }));
-  const pts = corners(model.bounds).map(v.p);
-  const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
-  const mid: [number, number] = [F.w / 2, top + availH / 2];
-  const anchor = centre(model.bounds), pa = v.p(anchor);
-  const c2: [number, number] = [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2];
+  const scale = Math.min(T.maxScale, ...[cam, ...states.map((s) => s.cam)].map((c) => { const b = box(c); return Math.min(availW / Math.max(b.x1 - b.x0, 0.001), availH / Math.max(b.y1 - b.y0, 0.001)); }));
+  const mid: [number, number] = [F.w / 2, top + availH / 2], b0 = box(cam);
   return {
-    spec, model, states, showTitle,
-    fit: { scale, anchor, centre: mid, anchorScreen: [mid[0] - scale * (c2[0] - pa[0]), mid[1] - scale * (c2[1] - pa[1])] },
+    spec, model, states, showTitle, view: model.view,
+    fit: { scale, anchor, centre: mid, anchorScreen: [mid[0] - scale * (b0.x0 + b0.x1) / 2, mid[1] - scale * (b0.y0 + b0.y1) / 2] },
   };
 }
 
@@ -135,16 +146,16 @@ export function alphas(scene: Scene, s: StepState | null) {
 
 // Where the whole scene lands on screen for a camera with no target: [left, top, right, bottom].
 export function frameBox(scene: Scene, cam: Cam): [number, number, number, number] {
-  const v = view_(cam.yaw, cam.pitch), pa = v.p(scene.fit.anchor), S = scene.fit.scale * cam.zoom;
-  const q = corners(scene.model.bounds).map((c) => { const p = v.p(c); return [scene.fit.anchorScreen[0] + S * (p[0] - pa[0]), scene.fit.anchorScreen[1] + S * (p[1] - pa[1])]; });
+  const L = lens(cam, scene.fit.anchor), S = scene.fit.scale * cam.zoom, AS = scene.fit.anchorScreen;
+  const q = corners(scene.model.bounds).map((c) => { const r = L.r(c); return [AS[0] + S * r[0], AS[1] + S * r[1]]; });
   return [Math.min(...q.map((p) => p[0])), Math.min(...q.map((p) => p[1])), Math.max(...q.map((p) => p[0])), Math.max(...q.map((p) => p[1]))];
 }
 
 // World point to frame pixels for a settled camera.
 export function projector(scene: Scene, cam: Cam): (p: Vec3) => [number, number] {
-  const v = view_(cam.yaw, cam.pitch), t = cam.target ? targetPoint(scene.model, cam.target) : null;
-  const A = t ?? scene.fit.anchor, AS = t ? scene.fit.centre : scene.fit.anchorScreen, S = scene.fit.scale * cam.zoom, pa = v.p(A);
-  return (p) => { const q = v.p(p); return [AS[0] + S * (q[0] - pa[0]), AS[1] + S * (q[1] - pa[1])]; };
+  const t = cam.target ? targetPoint(scene.model, cam.target) : null;
+  const L = lens(cam, t ?? scene.fit.anchor), AS = t ? scene.fit.centre : scene.fit.anchorScreen, S = scene.fit.scale * cam.zoom;
+  return (p) => { const r = L.r(p); return [AS[0] + S * r[0], AS[1] + S * r[1]]; };
 }
 
 export function wrapText(text: string, max: number): string[] {

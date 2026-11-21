@@ -18,7 +18,7 @@ export interface LCallout { id: string; spec: CalloutSpec; anchor: Vec3; side: '
 export interface Model {
   callouts: LCallout[];
   nodes: LNode[]; byId: Map<string, LNode>; groups: LGroup[]; edges: LEdge[];
-  bounds: Box; planes: number[]; flat: boolean;
+  bounds: Box; planes: number[]; flat: boolean; view: View;
 }
 
 // Where the words go on a node's top face, and how much room they have.
@@ -112,7 +112,7 @@ function planLabel(pts: P2[], z: number, e: EdgeSpec): EdgeLabel | undefined {
     : { at: [mx + 0.13, base, z], anchor: 'start', rect: [mx + 0.13, base - size, mx + 0.13 + w, base] };
 }
 
-export function buildModel(spec: Spec, view: View = spec.view ?? 'iso'): Model {
+export function buildModel(spec: Spec, view: View = spec.view ?? '3d'): Model {
   const flat = view === 'flat';
   const nodes: LNode[] = spec.nodes.map((n) => ({
     id: n.id, spec: n, kind: n.kind ?? 'process', layer: n.layer ?? 0, plane: flat ? 0 : n.layer ?? 0, box: nodeBox(n),
@@ -222,5 +222,5 @@ export function buildModel(spec: Spec, view: View = spec.view ?? 'iso'): Model {
     const anchor: Vec3 = side === 'up' ? [cx, b.y0, b.z1] : side === 'down' ? [cx, b.y1, b.z0] : side === 'left' ? [b.x0, cy, b.z1] : [b.x1, cy, b.z1];
     callouts.push({ id: c.id, spec: c, anchor, side });
   }
-  return { nodes, byId, groups, edges, bounds, planes, flat, callouts };
+  return { nodes, byId, groups, edges, bounds, planes, flat, view, callouts };
 }
