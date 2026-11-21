@@ -52,6 +52,7 @@ All of these play in the [gallery](docs/gallery.md).
 | `08-request-flow`, `09-agent-loop` | two layers with a fail path; a loop with a cap |
 | `10-platform-50` | fifty components in thirteen areas, shown whole and then as a guided tour |
 | `11-aws-routing` | 27 popular AWS services and 29 lines; each step shows one routing rule |
+| `12-own-icons` | icons that are not built in: SVG and PNG files, and SVG written into the spec |
 
 ## Three views from one spec
 
@@ -152,7 +153,7 @@ turns, and which lines it shares a stretch with.
   "shape": "cylinder", "icon": "database", "at": [8, 0], "size": [2.6, 1] }
 ```
 
-- **Icons.** 24 built-in line icons, tinted with the node's colour: `user`,
+- **Icons.** Use your own (next section), or one of 24 built-in line icons, tinted with the node's colour: `user`,
   `globe`, `server`, `database`, `storage`, `function`, `queue`, `gateway`,
   `shield`, `lock`, `cloud`, `bolt`, `search`, `gear`, `balance`, `document`,
   `mail`, `clock`, `check`, `stop`, `container`, `cart`, `card`, `code`. An icon
@@ -171,6 +172,51 @@ turns, and which lines it shares a stretch with.
   The checker refuses a callout that leaves the frame, covers a box, or
   points at something not yet on screen.
 
+## Your own icons
+
+Any icon can be used if it is in a format a browser draws: **SVG, PNG, JPEG,
+WebP or GIF**. There are three ways in.
+
+**1. Name files in the spec.** Paths are read from beside the spec; a web
+address works too.
+
+```json
+"icons": { "camera": "art/camera.svg", "album": "art/album.png" },
+"nodes": [{ "id": "photo", "label": "PHOTO", "icon": "camera", "at": [0, 0], "size": [2.6, 1] }]
+```
+
+**2. Write the SVG into the spec**, which keeps a scene in one file:
+
+```json
+"icons": { "tag": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor'><path d='M3 12V4h8l10 10-8 8z'/></svg>" }
+```
+
+**3. Import a whole set as a pack**, from a folder or a zip:
+
+```sh
+bun scripts/icons.ts ~/Downloads/some-icons --prefix acme    # writes icons/acme.json
+```
+
+Each icon is named after its file, so `Cloud Storage.svg` becomes
+`"icon": "acme:cloud-storage"`. The command line finds `icons/acme.json` by
+the prefix. On your own page, add `icons="icons/acme.json"` to the tag.
+
+How they are drawn:
+
+- **Colour.** An SVG that draws in `currentColor` takes its box's colour and
+  follows the light and dark themes, like the built-in icons. Most line-icon
+  sets are made this way. Every other picture keeps its own colours.
+- **Shape.** A picture that is not square keeps its shape and is fitted
+  inside the icon square.
+- **Size.** A file over 512 KB is refused; shrink it first. SVG is best:
+  sharp at any zoom and small.
+- **Decks stay in one file.** `html` puts the artwork inside the page, and
+  only the icons its scenes use.
+- **Licences.** `icons/` is git-ignored. Check a set's licence before you
+  share a pack or a deck made with it.
+
+[`12-own-icons`](examples/12-own-icons.json) shows each kind.
+
 ## AWS icons
 
 The official AWS Architecture Icons are not in this repo. AWS lets customers
@@ -188,8 +234,8 @@ carries only the icons its scenes use. On your own page, add
 [`examples/with-aws-icons`](examples/with-aws-icons). Pack icons keep their
 own colours; the node's box and text still follow the colour meanings.
 
-Any other vendor's set works the same way: a pack is a JSON object of
-`"prefix:name": "<svg ...>"`.
+The AWS importer exists only because that package needs its long file names
+shortened. Any other set goes through `scripts/icons.ts` above.
 
 ## A spec
 
@@ -254,18 +300,21 @@ bun scripts/gif.ts spec.json out.gif                 # needs rsvg-convert and ff
 | `src/spec.ts` | the spec format |
 | `src/layout.ts` | boxes and right-angled line routes |
 | `src/icons.ts` | built-in icons and icon packs |
+| `src/files.ts` | reading icon files, for the command line |
 | `src/scene.ts` | camera maths and what is on screen at each step |
 | `src/validate.ts` | the checker |
 | `src/render.ts` | one frame as an SVG string |
 | `src/mount.ts` | the browser runtime and `<scene-plate>` |
 | `src/cli.ts` | `check`, `routes`, `svg`, `html` |
+| `scripts/icons.ts` | turns a folder or zip of pictures into an icon pack |
 
 `bun test` runs the checks. `bun run build` rebuilds `dist/` and the example deck.
 
 ## Limits
 
 - Boxes and cylinders only; lines are right-angled, never curved.
-- Icon packs are drawn as images, so they do not take the theme's colours.
+- Only SVG icons drawn in `currentColor` take the theme's colours; other pictures stay as they are.
+- WebP icons draw in browsers; stills and GIFs made on the command line have only been tried with SVG, PNG, JPEG and GIF.
 - A line between layers needs one node directly above the other.
 - A line that spans more than one layer is drawn in front of the layers between.
 - About ten nodes fit one slide at a readable size. Beyond that, tour the scene (see Big scenes) or split it.

@@ -71,7 +71,13 @@ the bottom; higher layers float above.
 `lock`, `cloud`, `bolt`, `search`, `gear`, `balance`, `document`, `mail`,
 `clock`, `check`, `stop`, `container`, `cart`, `card`, `code`. An icon takes
 room, so give those nodes `"size": [2.6, 1]` and space columns 4 apart (0, 4,
-8, 12). `"shape": "cylinder"` is for databases and stores. If an icon pack has
+8, 12). `"shape": "cylinder"` is for databases and stores. **Other icons.** Any SVG, PNG, JPEG, WebP or GIF works. For a few, add
+`"icons": { "logo": "art/logo.svg" }` to the spec (a path beside the spec, a
+web address, or the SVG text itself) and use `"icon": "logo"`. For a whole
+set, `bun $SCENE_PLATES_HOME/scripts/icons.ts <folder or zip> --prefix acme`
+then `"icon": "acme:name"`. An SVG drawn in `currentColor` takes the node's
+colour; other pictures keep theirs. Never invent artwork for a real product's
+logo; use the user's file or a built-in icon. If an icon pack has
 been imported, its icons are named with a prefix: `"aws:lambda"`, `"aws:s3"`,
 `"aws:dynamodb"`. Only use `aws:` names when `icons/aws.json` exists in
 `$SCENE_PLATES_HOME`; otherwise use the built-in ones.

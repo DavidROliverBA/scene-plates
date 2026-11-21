@@ -10,8 +10,8 @@ import type { ThemeName } from './tokens';
 import { compile } from './scene';
 import { renderFrame } from './render';
 import { sharedPaths, validate } from './validate';
-import { hasIcon, iconSource, registerIcons } from './icons';
-import { existsSync } from 'node:fs';
+import { registerIcons } from './icons';
+import { loadIcons, usedPackIcons } from './files';
 
 const [cmd, ...rest] = process.argv.slice(2);
 const flags: Record<string, string | true> = {};
@@ -30,12 +30,7 @@ if (view && !VIEWS.includes(view)) fail(`--view must be one of ${VIEWS.join(', '
 async function load(path: string): Promise<Spec> {
   let spec: Spec;
   try { spec = await Bun.file(path).json(); } catch (e) { fail(`${path}: not readable JSON (${(e as Error).message})`); }
-  // An icon such as "aws:lambda" loads icons/aws.json from here or from the repo, unless --icons names a pack.
-  for (const n of spec!.nodes ?? []) {
-    const prefix = n.icon?.includes(':') && !hasIcon(n.icon) ? n.icon.split(':')[0] : null;
-    const found = prefix && [join('icons', `${prefix}.json`), join(import.meta.dir, '..', 'icons', `${prefix}.json`)].find((p) => existsSync(p));
-    if (found) registerIcons(await Bun.file(found).json());
-  }
+  try { await loadIcons(spec!, path); } catch (e) { fail((e as Error).message); }
   const errs = validate(spec!, view);
   if (errs.length) fail(`${path}: ${errs.length} problem${errs.length > 1 ? 's' : ''}\n` + errs.map((m) => `  - ${m}`).join('\n'));
   return spec!;
@@ -44,7 +39,10 @@ function fail(msg: string): never { console.error(msg); process.exit(1); }
 const usage = () => fail('Usage:\n  scene-plates check <spec.json>...\n  scene-plates routes <spec.json>      (how each line was routed, and why)\n  scene-plates svg <spec.json> [--step N | --all] [--theme light|dark] [--view 3d|iso|flat] [-o file-or-folder]\n  scene-plates html <spec.json>... -o deck.html [--no-toggle]\nAny command: --icons pack.json');
 
 if (!cmd || !files.length) usage();
-if (flags.icons) registerIcons(await Bun.file(flags.icons as string).json());
+if (flags.icons) {
+  const left = registerIcons(await Bun.file(flags.icons as string).json());
+  if (left.length) console.error(`${flags.icons}: left out ${left.length} icon${left.length > 1 ? 's' : ''}:\n` + left.slice(0, 10).map((m) => '  - ' + m).join('\n'));
+}
 
 if (cmd === 'check') {
   for (const p of files) { const s = await load(p); console.log(`ok  ${p}  (${s.nodes.length} nodes, ${(s.steps ?? []).length || 1} steps, ${view ?? s.view ?? '3d'})`); }
@@ -86,8 +84,7 @@ if (cmd === 'check') {
   const slides = specs.map((s, i) =>
     `<section class="slide"${i ? '' : ' data-on'}><scene-plate${view ? ` view="${view}"` : ''}${toggle}><script type="application/json">${JSON.stringify(s).replace(/</g, '\\u003c')}</script></scene-plate></section>`).join('\n');
   // Only the pack icons these scenes use travel with the page.
-  const used: Record<string, string> = {};
-  for (const s of specs) for (const n of s.nodes) if (n.icon && iconSource(n.icon)) used[n.icon] = iconSource(n.icon)!;
+  const used = usedPackIcons(specs);
   const icons = Object.keys(used).length ? `<script>window.ScenePlateIcons=${JSON.stringify(used).replace(/</g, '\\u003c')}</script>\n` : '';
   const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">

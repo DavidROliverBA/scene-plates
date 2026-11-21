@@ -21,6 +21,7 @@ test('examples exist', () => expect(examples.length).toBeGreaterThan(0));
 for (const f of examples) {
   test(`${f} validates and every step renders the same way twice`, async () => {
     const spec = await load(f);
+    await loadIcons(spec, join(dir, f));
     expect(validate(spec)).toEqual([]);
     const scene = compile(spec);
     for (let i = 0; i < scene.states.length; i++) {
@@ -318,4 +319,58 @@ test('the tutorial specs pass in every view, and the broken one is refused', asy
   for (const f of ['1-two-boxes', '2-steps', '3-meaning', '4-photo-upload'])
     for (const v of ['3d', 'iso', 'flat'] as const) expect(validate(await load(`tutorial/${f}.json`), v)).toEqual([]);
   expect(validate(await load('tutorial/broken.json')).length).toBeGreaterThan(0);
+});
+
+// --- any icons --------------------------------------------------------------
+import { iconImage, iconProblem } from '../src/icons';
+import { cleanSvg, iconFromBytes, loadIcons } from '../src/files';
+
+const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+test('an icon may be SVG text or a PNG, JPEG, WebP or GIF data URI, and nothing else', () => {
+  expect(iconProblem('<svg viewBox="0 0 1 1"/>')).toBeNull();
+  expect(iconProblem(PNG)).toBeNull();
+  expect(iconProblem('data:image/webp;base64,AAAA')).toBeNull();
+  expect(iconProblem('data:image/bmp;base64,AAAA')).toContain('SVG, PNG');
+  expect(iconProblem('data:text/html,<svg>')).not.toBeNull();
+  expect(iconProblem('hello')).not.toBeNull();
+  expect(registerIcons({ 'acme:ok': PNG, 'acme:no': 'hello' })).toEqual(['acme:no: it is neither SVG text nor an image data URI']);
+});
+test('an SVG drawn in currentColor takes the node colour; other pictures keep their own', () => {
+  registerIcons({ 'acme:line': '<svg viewBox="0 0 24 24" stroke="currentColor"><path d="M1 1h9"/></svg>', 'acme:pic': PNG });
+  expect(decodeURIComponent(iconImage('acme:line', '#123456')!)).toContain('stroke="#123456"');
+  expect(iconImage('acme:pic', '#123456')).toBe(PNG);
+  const s = base(); s.nodes[0].icon = 'acme:line'; s.nodes[0].kind = 'gate'; s.nodes[0].size = [2.6, 1]; s.nodes[1].at = [4, 0];
+  expect(validate(s)).toEqual([]);
+  const drawn = renderFrame(compile(s), { step: 0 });
+  expect(drawn).toContain('<image href="data:image/svg+xml');
+  expect(drawn).not.toContain('currentColor');
+});
+test('a spec can carry its own icons, and a bad one is named', () => {
+  const s = base(); s.nodes[0].size = [2.6, 1]; s.nodes[1].at = [4, 0]; s.nodes[0].icon = 'mine';
+  s.icons = { mine: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg>' };
+  expect(validate(s)).toEqual([]);
+  expect(renderFrame(compile(s), { step: 0 })).toContain('<image href="data:image/svg+xml');
+  s.icons = { mine: 'art/logo.bmp' };
+  expect(has(validate(s), 'not a format it can draw')).toBe(true);
+  s.icons = { database: PNG };
+  expect(has(validate(s), 'built-in icon')).toBe(true);
+  s.icons = { mine: 'art/unread.svg' }; s.nodes[0].icon = 'mine2'; s.icons.mine2 = 'art/unread.svg';
+  expect(has(validate(s), 'has not been read')).toBe(true);
+});
+test('files become icons: SVG is tidied, pictures become data URIs, other formats are refused', () => {
+  const svg = cleanSvg('<?xml version="1.0"?><!-- x --><svg width="48" height="32" onload="x()"><script>alert(1)</script><rect/></svg>');
+  expect(svg).toContain('viewBox="0 0 48 32"');
+  expect(svg).not.toMatch(/script|onload|<!--/);
+  expect(iconFromBytes(new Uint8Array([1, 2, 3]), 'a.PNG')).toBe('data:image/png;base64,AQID');
+  expect(() => iconFromBytes(new Uint8Array([1]), 'a.bmp')).toThrow('SVG, PNG');
+  expect(() => iconFromBytes(new Uint8Array(600 * 1024), 'a.png')).toThrow('KB');
+});
+test('the own-icons example reads its files and passes in every view', async () => {
+  const p = join(dir, '12-own-icons.json'), spec: Spec = await Bun.file(p).json();
+  await loadIcons(spec, p);
+  expect(spec.icons!.camera).toContain('<svg');
+  expect(spec.icons!.album).toStartWith('data:image/png;base64,');
+  for (const v of ['3d', 'iso', 'flat'] as const) expect(validate(spec, v)).toEqual([]);
+  const missing: Spec = { ...spec, icons: { ...spec.icons, camera: 'art/nope.svg' } };
+  expect(loadIcons(missing, p)).rejects.toThrow('no such file');
 });

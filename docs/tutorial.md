@@ -123,7 +123,9 @@ Add a scan that can reject a file, and a store drawn as a cylinder:
 ![Six boxes with icons, a red reject path and a green store](tutorial/3-meaning.png)
 
 - **`icon`** adds a small picture. There are 24 built in; the
-  [README](../README.md#icons-cylinders-titles-and-callouts) lists them. An
+  [README](../README.md#icons-cylinders-titles-and-callouts) lists them. You
+  can also [use your own](../README.md#your-own-icons): any SVG, PNG, JPEG,
+  WebP or GIF. An
   icon takes room, so give those boxes `"size": [2.6, 1]` and put columns 4
   apart (0, 4, 8, 12).
 - **`"shape": "cylinder"`** is for databases and stores.
@@ -299,6 +301,7 @@ like "an animated diagram of our sign-in flow, five steps".
 | a box | `{ "id", "label", "sub", "at": [col, row] }` |
 | a meaning | `"kind": "gate"`, `"fail"`, `"success"` or `"quiet"` |
 | an icon | `"icon": "shield"` and `"size": [2.6, 1]` |
+| your own icon | `"icons": { "logo": "art/logo.svg" }`, then `"icon": "logo"` |
 | a database | `"shape": "cylinder"` |
 | a line | `{ "from", "to", "label" }` |
 | a plate | `"groups": [{ "id", "label", "contains": [...] }]` |

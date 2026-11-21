@@ -67,3 +67,10 @@ The whole map, then a guided tour. [Spec](../examples/10-platform-50.json)
 [Spec](../examples/11-aws-routing.json)
 
 ![AWS routing rules](gallery/11-aws-routing.gif)
+
+## 12 Your own icons
+
+SVG and PNG files, and SVG written into the spec.
+[Spec](../examples/12-own-icons.json)
+
+![Four boxes with icons that are not built in](gallery/12-own-icons.gif)

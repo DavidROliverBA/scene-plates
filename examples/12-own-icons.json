@@ -1,0 +1,32 @@
+{
+  "title": "Bring your own icons",
+  "subtitle": "SVG, PNG, JPEG, WebP or GIF, from a file or written into the spec",
+  "description": "Four boxes, each with an icon that is not built in: a line SVG that takes the box's colour, a coloured SVG, a PNG that is not square, and an SVG written straight into the spec.",
+  "icons": {
+    "camera": "art/camera.svg",
+    "palette": "art/palette.svg",
+    "album": "art/album.png",
+    "tag": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.7' stroke-linejoin='round'><path d='M3 12V4h8l10 10-8 8z'/><circle cx='8' cy='9' r='1.6'/></svg>"
+  },
+  "nodes": [
+    {"id": "photo", "label": "PHOTO", "sub": "line svg, tinted", "icon": "camera", "at": [0, 0], "size": [2.6, 1]},
+    {"id": "enhance", "label": "ENHANCE", "sub": "coloured svg", "icon": "palette", "at": [4, 0], "size": [2.6, 1]},
+    {"id": "label", "label": "LABEL", "sub": "svg in the spec", "kind": "gate", "icon": "tag", "at": [8, 0], "size": [2.6, 1]},
+    {"id": "album", "label": "ALBUM", "sub": "png, not square", "kind": "success", "icon": "album", "at": [12, 0], "size": [2.6, 1]}
+  ],
+  "edges": [
+    {"from": "photo", "to": "enhance"},
+    {"from": "enhance", "to": "label"},
+    {"from": "label", "to": "album"}
+  ],
+  "callouts": [
+    {"id": "tint", "text": "An SVG that draws in currentColor takes the box's colour, like the built-in icons.", "on": "photo", "side": "up"},
+    {"id": "shape", "text": "A picture keeps its shape and its own colours. It is fitted inside the icon square.", "on": "album", "side": "down"}
+  ],
+  "steps": [
+    {"caption": "A line SVG from a file. It is navy because the box is.", "show": ["photo"], "callout": ["tint"]},
+    {"caption": "A coloured SVG keeps its own colours.", "show": ["enhance"], "pulse": ["photo>enhance"]},
+    {"caption": "This one is written into the spec. It turns teal with its box.", "show": ["label"], "pulse": ["enhance>label"]},
+    {"caption": "A PNG works too, even one that is not square.", "show": ["album"], "pulse": ["label>album"], "callout": ["shape"]}
+  ]
+}

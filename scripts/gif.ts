@@ -11,6 +11,7 @@ import { renderFrame } from '../src/render';
 import { validate } from '../src/validate';
 import { tokens as T, type ThemeName } from '../src/tokens';
 import { registerIcons } from '../src/icons';
+import { loadIcons } from '../src/files';
 
 const args = process.argv.slice(2);
 const opt = (name: string, d: string) => { const i = args.indexOf(name); return i >= 0 ? args.splice(i, 2)[1] : d; };
@@ -22,6 +23,7 @@ const [specPath, outPath] = args;
 if (!specPath || !outPath) { console.error('Usage: bun scripts/gif.ts spec.json out.gif [--theme dark] [--width 960]'); process.exit(1); }
 
 const spec = await Bun.file(specPath).json();
+await loadIcons(spec, specPath);
 const errs = validate(spec, view);
 if (errs.length) { console.error(errs.map((e) => '- ' + e).join('\n')); process.exit(1); }
 

@@ -7,7 +7,7 @@ import { tokens as T, type ThemeName } from './tokens';
 import { compile, type Scene } from './scene';
 import { renderFrame, renderMorph } from './render';
 import { validate } from './validate';
-import { registerIcons, type IconPack } from './icons';
+import { ICON_TYPES, isInlineIcon, registerIcons, type IconPack } from './icons';
 
 export interface MountOpts {
   theme?: ThemeName | 'auto';
@@ -159,12 +159,32 @@ export function mount(el: HTMLElement, spec: Spec, opts: MountOpts = {}): Contro
   };
 }
 
+// Read the pictures a spec's own "icons" point at, relative to the spec. One
+// that cannot be read is left as it is, and the checker then names it.
+async function fetchIcons(spec: Spec, base: string): Promise<void> {
+  const own = spec.icons;
+  if (!own || typeof own !== 'object') return;
+  await Promise.all(Object.entries(own).map(async ([name, v]) => {
+    if (typeof v !== 'string' || isInlineIcon(v) || /^data:/i.test(v)) return;
+    try {
+      const url = new URL(v, base), res = await fetch(url);
+      if (!res.ok) return;
+      const ext = url.pathname.split('.').pop()!.toLowerCase();
+      if (ext === 'svg') { own[name] = await res.text(); return; }
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      let bin = '';
+      for (let i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode(...bytes.subarray(i, i + 8192));
+      if (ICON_TYPES[ext]) own[name] = `data:${ICON_TYPES[ext]};base64,${btoa(bin)}`;
+    } catch { /* the checker reports it */ }
+  }));
+}
+
 // A page can hand over icon packs before this script loads.
 registerIcons((globalThis as any).ScenePlateIcons ?? {});
 
 // <scene-plate src="flow.json"></scene-plate>, or with the JSON inline in a
 // <script type="application/json"> child. Attributes: view, theme, bare,
-// toggle, notitle, icons (the address of an icon pack).
+// toggle, notitle, icons (the addresses of icon packs, with spaces between).
 if (typeof customElements !== 'undefined' && !customElements.get('scene-plate')) {
   class ScenePlate extends HTMLElement {
     ctl?: Controller;
@@ -173,8 +193,9 @@ if (typeof customElements !== 'undefined' && !customElements.get('scene-plate'))
       let spec: Spec;
       try {
         const src = this.getAttribute('src'), icons = this.getAttribute('icons');
-        if (icons) registerIcons((await (await fetch(icons)).json()) as IconPack);
+        for (const pack of (icons ?? '').split(/\s+/).filter(Boolean)) registerIcons((await (await fetch(pack)).json()) as IconPack);
         spec = src ? await (await fetch(src)).json() : JSON.parse(this.querySelector('script[type="application/json"]')!.textContent!);
+        await fetchIcons(spec, new URL(src ?? '', document.baseURI).href);
       } catch (e) {
         this.textContent = `scene-plate: could not read the spec (${(e as Error).message})`;
         return;

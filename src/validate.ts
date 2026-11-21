@@ -4,7 +4,7 @@
 import { tokens as T } from './tokens';
 import { EDGE_KINDS, NODE_KINDS, VIEWS, type CameraSpec, type Spec, type View } from './spec';
 import { edgeId, textArea, type Box, type LEdge } from './layout';
-import { builtinIcons, hasIcon } from './icons';
+import { builtinIcons, hasIcon, iconProblem, registerIcons } from './icons';
 import { calloutBox, centre, compile, frameBox, projector } from './scene';
 
 type Rect = [number, number, number, number];
@@ -56,6 +56,15 @@ export function validate(spec: Spec, view?: View): string[] {
     ids.add(id);
   };
   const nodeIds = new Set<string>(), layerOf = new Map<string, number>();
+  if (spec.icons !== undefined) {
+    if (!spec.icons || typeof spec.icons !== 'object' || Array.isArray(spec.icons)) bad('"icons" must be an object of name: picture, such as { "logo": "icons/logo.svg" }.');
+    else for (const [name, v] of Object.entries(spec.icons)) {
+      if (builtinIcons().includes(name)) bad(`Icon "${name}" has the name of a built-in icon. Give it another name.`);
+      else if (typeof v !== 'string' || !v.trim()) bad(`Icon "${name}" needs a file, an address, SVG text or an image data URI.`);
+      else if (/^data:|<svg/i.test(v)) { const why = iconProblem(v); if (why) bad(`Icon "${name}" cannot be drawn: ${why}.`); else registerIcons({ [name]: v }); }
+      else if (!/\.(svg|png|jpe?g|webp|gif)([?#].*)?$/i.test(v)) bad(`Icon "${name}" (${v}) is not a format it can draw. Use SVG, PNG, JPEG, WebP or GIF.`);
+    }
+  }
   for (const n of spec.nodes) {
     claim(n.id, 'Node');
     nodeIds.add(n.id);
@@ -66,9 +75,11 @@ export function validate(spec: Spec, view?: View): string[] {
     if (n.kind && !NODE_KINDS.includes(n.kind)) bad(`Node "${n.id}" has kind "${n.kind}"; use one of ${NODE_KINDS.join(', ')}.`);
     if (n.shape && n.shape !== 'box' && n.shape !== 'cylinder') bad(`Node "${n.id}" has shape "${n.shape}"; use box or cylinder.`);
     if (n.icon && !hasIcon(n.icon)) {
-      bad(n.icon.includes(':')
+      const own = spec.icons && typeof spec.icons === 'object' ? spec.icons[n.icon] : undefined;
+      if (typeof own === 'string') { if (!iconProblem(own)) registerIcons({ [n.icon]: own }); else if (!/^data:|<svg/i.test(own)) bad(`Node "${n.id}" uses icon "${n.icon}" (${own}), which has not been read. The command line reads it for you; on a page, use the <scene-plate> tag or put the SVG text in the spec.`); }
+      else bad(n.icon.includes(':')
         ? `Node "${n.id}" uses icon "${n.icon}", which is not loaded. Load its icon pack (--icons on the command line, or the icons attribute on the page), or check the name.`
-        : `Node "${n.id}" uses icon "${n.icon}", which does not exist. Built-in icons: ${builtinIcons().join(', ')}.`);
+        : `Node "${n.id}" uses icon "${n.icon}", which does not exist. Add it under "icons" in the spec, or use a built-in one: ${builtinIcons().join(', ')}.`);
     }
     if (n.layer !== undefined && (!Number.isInteger(n.layer) || n.layer < 0)) bad(`Node "${n.id}" layer must be a whole number, 0 or more.`);
   }

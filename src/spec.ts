@@ -10,7 +10,7 @@ export interface NodeSpec {
   sub?: string;
   kind?: NodeKind; // default process
   shape?: NodeShape; // box (default) or cylinder, for databases and stores
-  icon?: string; // a built-in name such as "database", or one from a pack such as "aws:lambda"
+  icon?: string; // a built-in name such as "database", one from a pack such as "aws:lambda", or a name from this spec's "icons"
   at: [number, number]; // [column, row] of the back-left corner, in grid units
   size?: [number, number]; // [width, depth], default [2, 1]
   layer?: number; // 0 is the bottom layer
@@ -72,6 +72,7 @@ export interface Spec {
   subtitle?: string;
   description: string; // read out by screen readers: say what the diagram shows
   callouts?: CalloutSpec[];
+  icons?: Record<string, string>; // this scene's own icons: name -> a file beside the spec, an address, SVG text or an image data URI
   camera?: CameraSpec;
   nodes: NodeSpec[];
   groups?: GroupSpec[];

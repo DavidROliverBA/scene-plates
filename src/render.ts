@@ -140,8 +140,8 @@ export function renderFrame(scene: Scene, o: FrameOpts = {}): string {
     const area = textArea({ ...n, box: b }), cy = (b.y0 + b.y1) / 2, LS = T.text.label, mid: Vec3 = [area.cx, cy, b.z1];
     if (area.iconAt && n.spec.icon) {
       const at: Vec3 = [area.iconAt[0], area.iconAt[1], b.z1], I = T.icon;
-      const d = iconPath(n.spec.icon), img = iconImage(n.spec.icon);
-      // Local units: a 24-wide box for built-in glyphs, 64 for a pack image.
+      const d = iconPath(n.spec.icon), img = iconImage(n.spec.icon, col);
+      // Local units: a 24-wide box for built-in glyphs, 64 for an image, which keeps its own shape inside that square.
       if (d) s += `<path d="${d}" transform="matrix(${faceMatrix(at, 24 / I.size)})" fill="none" stroke="${col}" stroke-width="${I.stroke}" stroke-linecap="round"/>`;
       else if (img) s += `<image href="${img}" width="64" height="64" transform="matrix(${faceMatrix(at, 64 / I.size)})"/>`;
     }

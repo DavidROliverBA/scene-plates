@@ -3,7 +3,7 @@
 // imported from the AWS Architecture Icons package) are registered at run time
 // and are drawn as they come, in their own colours.
 
-export type IconPack = Record<string, string>; // name -> full <svg> text
+export type IconPack = Record<string, string>; // name -> SVG text or an image data URI
 
 const builtin: Record<string, string> = {
   user: 'M12 4a4 4 0 1 0 0 8a4 4 0 0 0 0-8z M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7',
@@ -32,22 +32,54 @@ const builtin: Record<string, string> = {
   code: 'M8 7l-5 5 5 5 M16 7l5 5-5 5 M13.5 5l-3 14',
 };
 
-const packs = new Map<string, string>(); // name -> data URI
-const sources = new Map<string, string>(); // name -> original svg text
+// What an icon may be: SVG text, or a data URI holding one of these image types.
+export const ICON_TYPES: Record<string, string> = { svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' };
+const DATA = /^data:image\/(svg\+xml|png|jpeg|webp|gif)[;,]/i;
+const isSvg = (v: string) => /<svg[\s>]/i.test(v) && !/^data:/i.test(v);
+export const isInlineIcon = (v: unknown): v is string => typeof v === 'string' && (isSvg(v) || DATA.test(v));
+
+// Says why a value cannot be used as an icon, or null when it can.
+export function iconProblem(v: unknown): string | null {
+  if (typeof v !== 'string' || !v.trim()) return 'it is empty';
+  if (/^data:/i.test(v)) return DATA.test(v) ? null : 'its data type is not one of SVG, PNG, JPEG, WebP or GIF';
+  return isSvg(v) ? null : 'it is neither SVG text nor an image data URI';
+}
+
+interface Entry { source: string; uri: string; tints: boolean }
+const packs = new Map<string, Entry>();
+const tinted = new Map<string, string>();
+const uriOf = (svg: string) => 'data:image/svg+xml,' + encodeURIComponent(svg).replace(/'/g, '%27');
 
 export const builtinIcons = () => Object.keys(builtin);
 
-// Add icons from a pack. Names usually carry a prefix, such as "aws:lambda".
-export function registerIcons(pack: IconPack): void {
-  for (const [name, svg] of Object.entries(pack ?? {})) {
-    if (typeof svg !== 'string' || !/<svg[\s>]/i.test(svg)) continue;
-    sources.set(name, svg);
-    packs.set(name, 'data:image/svg+xml,' + encodeURIComponent(svg).replace(/'/g, '%27'));
+// Add icons. Pack names usually carry a prefix, such as "aws:lambda". Returns
+// the names it had to leave out, each with the reason.
+export function registerIcons(pack: IconPack): string[] {
+  const left: string[] = [];
+  for (const [name, v] of Object.entries(pack ?? {})) {
+    const why = iconProblem(v);
+    if (why) { left.push(`${name}: ${why}`); continue; }
+    const svg = isSvg(v);
+    packs.set(name, { source: v, uri: svg ? uriOf(v) : v, tints: svg && /currentColor/i.test(v) });
   }
+  tinted.clear();
+  return left;
 }
 
 export const iconPath = (name: string): string | undefined => builtin[name];
-export const iconImage = (name: string): string | undefined => packs.get(name);
-export const iconSource = (name: string): string | undefined => sources.get(name);
+// An SVG that uses currentColor takes the node's colour, as the built-in icons
+// do. Everything else is drawn in its own colours.
+export function iconImage(name: string, colour?: string): string | undefined {
+  const e = packs.get(name);
+  if (!e || !e.tints || !colour) return e?.uri;
+  const key = name + '|' + colour;
+  let uri = tinted.get(key);
+  if (!uri) {
+    if (tinted.size > 400) tinted.clear();
+    tinted.set(key, (uri = uriOf(e.source.replace(/currentColor/gi, colour))));
+  }
+  return uri;
+}
+export const iconSource = (name: string): string | undefined => packs.get(name)?.source;
 export const hasIcon = (name: string) => name in builtin || packs.has(name);
 export const packCount = () => packs.size;
