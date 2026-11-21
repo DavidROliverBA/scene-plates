@@ -1,0 +1,16 @@
+{
+  "name": "scene-plates",
+  "version": "0.1.0",
+  "description": "Animated 3D diagrams for HTML decks from a small JSON spec. One tokens file, a fixed motion vocabulary, a validator, no dependencies.",
+  "type": "module",
+  "license": "MIT",
+  "bin": { "scene-plates": "src/cli.ts" },
+  "scripts": {
+    "check": "bun src/cli.ts check",
+    "svg": "bun src/cli.ts svg",
+    "html": "bun src/cli.ts html",
+    "build": "bun build src/mount.ts --format=iife --minify --outfile=dist/scene-plates.min.js && bun src/cli.ts html examples/*.json -o examples/deck.html",
+    "test": "bun test"
+  },
+  "devDependencies": { "@types/bun": "latest" }
+}
