@@ -1,7 +1,7 @@
 {
   "title": "AWS landscape: edge, network and data",
   "description": "A three-layer AWS landscape. At the edge, CloudFront and a web firewall filter traffic. In the VPC, a load balancer in a public subnet feeds an API and a worker in a private subnet. Underneath, Aurora, a read replica and S3 hold the data.",
-  "camera": {"yaw": 14, "pitch": 40},
+  "camera": {"pitch": 40},
   "nodes": [
     {"id": "users", "label": "PEOPLE", "sub": "anywhere", "kind": "quiet", "at": [0, 0], "layer": 2},
     {"id": "cdn", "label": "CLOUDFRONT", "sub": "caches near people", "at": [3.6, 0], "layer": 2},
@@ -39,8 +39,8 @@
     {"caption": "The edge: CloudFront serves people from a location near them.", "show": ["users", "cdn"], "pulse": ["users>cdn"]},
     {"caption": "A web firewall filters every request. Bad traffic stops here.", "show": ["waf", "blocked"], "focus": ["waf", "blocked"], "pulse": ["cdn>waf", "waf>blocked"], "callout": ["gate"]},
     {"caption": "Allowed traffic drops into the VPC through a public load balancer.", "show": ["public"], "focus": ["waf", "alb"], "pulse": ["waf>alb"]},
-    {"caption": "The API and its worker sit in a private subnet, out of reach of the internet.", "show": ["private"], "focus": ["alb", "api", "worker"], "pulse": ["alb>api", "api>worker"], "camera": {"yaw": 8, "pitch": 33}},
+    {"caption": "The API and its worker sit in a private subnet, out of reach of the internet.", "show": ["private"], "focus": ["alb", "api", "worker"], "pulse": ["alb>api", "api>worker"], "camera": {"pitch": 33}},
     {"caption": "The data layer sits underneath: Aurora, its replica, and S3.", "show": ["data"], "focus": ["api", "worker", "data"], "pulse": ["api>db", "worker>files", "db>replica"]},
-    {"caption": "Three layers, one way in, and data that only private code can touch.", "camera": {"yaw": 14, "pitch": 40}}
+    {"caption": "Three layers, one way in, and data that only private code can touch.", "camera": {"pitch": 40}}
   ]
 }

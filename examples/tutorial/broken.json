@@ -1,0 +1,20 @@
+{
+  "title": "Uploading a photo",
+  "description": "A deliberately broken scene, to show what the checker says.",
+  "nodes": [
+    {"id": "phone", "label": "PHONE", "at": [0, 0]},
+    {"id": "upload", "label": "UPLOAD SERVICE FOR PHOTOS", "at": [3.4, 0]},
+    {"id": "scan", "label": "SCAN", "kind": "gate", "at": [6.8, 0]},
+    {"id": "store", "label": "STORE", "kind": "success", "at": [10.2, 0]},
+    {"id": "retry", "label": "RETRY", "at": [4.4, 0.5]}
+  ],
+  "edges": [
+    {"from": "phone", "to": "upload"},
+    {"from": "upload", "to": "scan"},
+    {"from": "phone", "to": "store"},
+    {"from": "scan", "to": "upload", "kind": "loop", "via": "y", "channel": 1.8}
+  ],
+  "steps": [
+    {"caption": "Everything at once.", "show": ["phone", "upload", "scan", "store", "retry"], "pulse": ["scan>store"]}
+  ]
+}

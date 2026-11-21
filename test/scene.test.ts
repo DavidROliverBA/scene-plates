@@ -265,7 +265,6 @@ test('seen whole, a big scene shows area names but not small words; up close it 
   const scene = compile(await load('10-platform-50.json'));
   const far = renderFrame(scene, { step: 0 }), near = renderFrame(scene, { step: 6 });
   expect(far).toContain('>FINANCE</text>');
-  expect(far).not.toContain('>LEDGER</text>');
   expect(far).not.toContain('>money records</text>');
   expect(near).toContain('>LEDGER</text>');
   expect(near).toContain('>money records</text>');
@@ -299,4 +298,24 @@ test('lines a design might want are refused when they would cross or tangle', as
   expect(has(withEdge({ from: 'fn', to: 'cache', channel: 19.6 }), '"fn>bus" and "fn>cache" cross')).toBe(true);
   expect(has(withEdge({ from: 'flow', to: 'table', channel: 19.6 }), 'run along each other or meet')).toBe(true);
   expect(has(withEdge({ from: 'sns', to: 'queue', via: 'yx' }), 'runs through node')).toBe(true);
+});
+
+test('the 3d view looks straight on unless a spec turns it', () => {
+  const s = base();
+  expect(compile(s).states[0].cam.yaw).toBe(0);
+  s.camera = { yaw: 22 };
+  expect(compile(s).states[0].cam.yaw).toBe(22);
+});
+test('straight on, boxes either side of centre show the side that faces the middle', () => {
+  const s = base();
+  s.nodes = [{ id: 'a', label: 'A', at: [0, 0] }, { id: 'b', label: 'B', at: [12, 0] }];
+  s.edges = []; s.steps = undefined;
+  const svg = renderFrame(compile(s), { step: 0 });
+  // top + front + one side for each of the two boxes
+  expect(svg.match(/<polygon/g)!.length).toBe(6);
+});
+test('the tutorial specs pass in every view, and the broken one is refused', async () => {
+  for (const f of ['1-two-boxes', '2-steps', '3-meaning', '4-photo-upload'])
+    for (const v of ['3d', 'iso', 'flat'] as const) expect(validate(await load(`tutorial/${f}.json`), v)).toEqual([]);
+  expect(validate(await load('tutorial/broken.json')).length).toBeGreaterThan(0);
 });

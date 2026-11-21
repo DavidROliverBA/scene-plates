@@ -1,0 +1,11 @@
+{
+  "title": "Uploading a photo",
+  "description": "A phone sends a photo to an upload service.",
+  "nodes": [
+    {"id": "phone", "label": "PHONE", "sub": "takes the photo", "at": [0, 0]},
+    {"id": "upload", "label": "UPLOAD", "sub": "receives the file", "at": [3.4, 0]}
+  ],
+  "edges": [
+    {"from": "phone", "to": "upload", "label": "photo"}
+  ]
+}

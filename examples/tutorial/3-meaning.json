@@ -1,0 +1,26 @@
+{
+  "title": "Uploading a photo",
+  "description": "A phone sends a photo to an upload service. A scan rejects unsafe files. Safe files are resized and stored.",
+  "nodes": [
+    {"id": "phone", "label": "PHONE", "sub": "takes the photo", "icon": "user", "at": [0, 0], "size": [2.6, 1]},
+    {"id": "upload", "label": "UPLOAD", "sub": "receives the file", "icon": "cloud", "at": [4, 0], "size": [2.6, 1]},
+    {"id": "scan", "label": "SCAN", "sub": "is it safe?", "kind": "gate", "icon": "shield", "at": [8, 0], "size": [2.6, 1]},
+    {"id": "reject", "label": "REJECTED", "sub": "file is dropped", "kind": "fail", "icon": "stop", "at": [8, -2.2], "size": [2.6, 1]},
+    {"id": "resize", "label": "RESIZE", "sub": "makes small copies", "icon": "function", "at": [12, 0], "size": [2.6, 1]},
+    {"id": "store", "label": "PHOTO STORE", "sub": "keeps every size", "kind": "success", "shape": "cylinder", "icon": "storage", "at": [16, 0], "size": [2.6, 1]}
+  ],
+  "edges": [
+    {"from": "phone", "to": "upload", "label": "photo"},
+    {"from": "upload", "to": "scan"},
+    {"from": "scan", "to": "reject", "kind": "fail", "label": "unsafe"},
+    {"from": "scan", "to": "resize", "kind": "pass", "label": "safe"},
+    {"from": "resize", "to": "store"}
+  ],
+  "steps": [
+    {"caption": "It starts with a photo on a phone.", "show": ["phone"]},
+    {"caption": "The phone sends it to the upload service.", "show": ["upload"], "pulse": ["phone>upload"]},
+    {"caption": "Every file is scanned before anything else touches it.", "show": ["scan"], "pulse": ["upload>scan"]},
+    {"caption": "An unsafe file stops here.", "show": ["reject"], "focus": ["scan", "reject"], "pulse": ["scan>reject"]},
+    {"caption": "A safe one is resized and stored.", "show": ["resize", "store"], "pulse": ["scan>resize", "resize>store"]}
+  ]
+}

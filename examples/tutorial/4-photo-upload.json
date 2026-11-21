@@ -1,0 +1,39 @@
+{
+  "title": "Uploading a photo",
+  "subtitle": "The finished tutorial scene",
+  "description": "A phone sends a photo to an upload service. A scan rejects unsafe files. Safe files are resized, then stored on a data layer underneath with a record of each photo.",
+  "nodes": [
+    {"id": "phone", "label": "PHONE", "sub": "takes the photo", "icon": "user", "at": [0, 0], "size": [2.6, 1], "layer": 1},
+    {"id": "upload", "label": "UPLOAD", "sub": "receives the file", "icon": "cloud", "at": [4.4, 0], "size": [2.6, 1], "layer": 1},
+    {"id": "scan", "label": "SCAN", "sub": "is it safe?", "kind": "gate", "icon": "shield", "at": [8.4, 0], "size": [2.6, 1], "layer": 1},
+    {"id": "reject", "label": "REJECTED", "sub": "file is dropped", "kind": "fail", "icon": "stop", "at": [8.4, -2.2], "size": [2.6, 1], "layer": 1},
+    {"id": "resize", "label": "RESIZE", "sub": "makes small copies", "icon": "function", "at": [12.4, 0], "size": [2.6, 1], "layer": 1},
+    {"id": "store", "label": "PHOTO STORE", "sub": "keeps every size", "kind": "success", "shape": "cylinder", "icon": "storage", "at": [12.4, 0], "size": [2.6, 1], "layer": 0},
+    {"id": "index", "label": "INDEX", "sub": "who owns what", "kind": "quiet", "shape": "cylinder", "icon": "database", "at": [8.4, 0], "size": [2.6, 1], "layer": 0}
+  ],
+  "groups": [
+    {"id": "service", "label": "SERVICE", "contains": ["upload", "scan", "reject", "resize"]},
+    {"id": "data", "label": "DATA", "contains": ["store", "index"]}
+  ],
+  "edges": [
+    {"from": "phone", "to": "upload", "label": "photo"},
+    {"from": "upload", "to": "scan"},
+    {"from": "scan", "to": "reject", "kind": "fail", "label": "unsafe"},
+    {"from": "scan", "to": "resize", "kind": "pass", "label": "safe"},
+    {"from": "resize", "to": "store", "label": "save"},
+    {"from": "store", "to": "index", "kind": "quiet", "label": "records"}
+  ],
+  "callouts": [
+    {"id": "why-first", "text": "Scanning comes first, so an unsafe file never reaches storage.", "on": "scan", "side": "down"}
+  ],
+  "steps": [
+    {"caption": "It starts with a photo on a phone.", "show": ["phone"]},
+    {"caption": "The phone sends it to the upload service.", "show": ["upload"], "pulse": ["phone>upload"]},
+    {"caption": "Every file is scanned before anything else touches it.", "show": ["scan"], "pulse": ["upload>scan"], "callout": ["why-first"]},
+    {"caption": "An unsafe file stops here.", "show": ["reject"], "focus": ["scan", "reject"], "pulse": ["scan>reject"]},
+    {"caption": "A safe one is resized.", "show": ["resize"], "pulse": ["scan>resize"]},
+    {"caption": "The copies are kept on the data layer underneath.", "show": ["data"], "focus": ["resize", "store", "index"], "pulse": ["resize>store", "store>index"], "camera": {"pitch": 32}},
+    {"caption": "Look closer: one store for the files, one index of who owns them.", "focus": ["store", "index"], "camera": {"target": ["data"], "zoom": 1.5}},
+    {"caption": "The whole path: scanned once, resized, stored.", "camera": {"target": null, "zoom": 1, "pitch": 38}}
+  ]
+}

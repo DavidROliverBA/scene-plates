@@ -55,7 +55,7 @@ export const tokens = {
   // Default camera, and the range in which labels stay readable.
   // persp is 1 / camera distance in grid units: 0 is no perspective, bigger is stronger.
   isometric: { yaw: 45, pitch: 35.264 }, // the one true isometric angle
-  camera: { yaw: 22, pitch: 38, zoom: 1, persp: 0.03, yawRange: [-45, 45], pitchRange: [25, 70], zoomRange: [0.6, 4] },
+  camera: { yaw: 0, pitch: 38, zoom: 1, persp: 0.03, yawRange: [-45, 45], pitchRange: [25, 70], zoomRange: [0.6, 4] },
 
   // Motion. Every move uses these and only these.
   motion: { step: 750, drop: 0.7, pulse: 1700, dim: 0.2, morph: 1400 },

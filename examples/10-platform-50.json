@@ -2,7 +2,7 @@
   "title": "A retail platform in fifty components",
   "subtitle": "Stress test: an overview you cannot read, then a guided tour you can",
   "description": "A retail platform of fifty components in thirteen areas: channels, edge, identity, content, catalogue, checkout, finance, fulfilment, customer, messaging, support, analytics and operations. Orders flow from the gateway through checkout and payment to the order service, whose events feed messaging and analytics.",
-  "camera": {"yaw": 12, "pitch": 50},
+  "camera": {"pitch": 50},
   "nodes": [
     {"id": "shoppers", "label": "SHOPPERS", "sub": "people buying", "kind": "quiet", "icon": "user", "at": [0, -2.8], "size": [2.6, 1]},
     {"id": "blocked", "label": "BLOCKED", "sub": "bots and attacks", "kind": "fail", "icon": "stop", "at": [12, -2.8], "size": [2.6, 1]},

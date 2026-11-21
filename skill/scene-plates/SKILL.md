@@ -45,7 +45,7 @@ the tool as `bun $SCENE_PLATES_HOME/src/cli.ts`, shortened to `sp` below.
   "steps": [
     { "caption": "Every request starts at the client.", "show": ["client"] },
     { "caption": "The gateway checks it.", "show": ["gateway"], "pulse": ["client>gateway"] },
-    { "caption": "Then it reads from the layer below.", "show": ["db"], "focus": ["gateway", "db"], "pulse": ["gateway>db"], "camera": { "yaw": 32 } }
+    { "caption": "Then it reads from the layer below.", "show": ["db"], "focus": ["gateway", "db"], "pulse": ["gateway>db"], "camera": { "pitch": 32 } }
   ]
 }
 ```
@@ -104,8 +104,8 @@ layer. A group may contain other groups, so plates nest: a VPC plate holding a
 public-subnet plate and a private-subnet plate. Leave 2 between nodes whose
 plates are neighbours (columns 3.6 and 7.6), so the plates do not touch.
 
-**View.** One spec draws three ways: `"view": "3d"` (default: perspective, and
-steps may turn and tilt the camera), `"iso"` (true isometric: fixed camera, no
+**View.** One spec draws three ways: `"view": "3d"` (default: perspective, straight on;
+steps may tilt and zoom the camera), `"iso"` (true isometric: fixed camera, no
 perspective; camera yaw and pitch in steps are ignored) or `"flat"` (from
 above; layers become bands). Use 3d for presenting and for layers, iso for the
 classic architecture-diagram look, flat for documents and simple flows. Wide
@@ -127,7 +127,7 @@ icon colours.
 | `hide` | — | removes them again |
 | `focus` | this step | everything else dims |
 | `pulse` | this step | a dot travels along these edges |
-| `camera` | until changed | `yaw` (-45 to 45), `pitch` (25 to 70), `zoom` (up to 4), `target` (ids to centre on, `null` to reset). Yaw and pitch apply in the 3d view only |
+| `camera` | until changed | `pitch` (25 to 70, default 38), `zoom` (up to 4), `yaw` (-45 to 45, default 0), `target` (ids to centre on, `null` to reset). Yaw and pitch apply in the 3d view only |
 | `callout` | this step | shows these callout ids (see below) |
 | `caption` | this step | one sentence under the scene, 84 characters at most |
 
@@ -174,8 +174,8 @@ small words and enlarges group labels, so the first step works as a map.
 - Use `focus` plus `pulse` to point at the thing the caption is about.
 - Move the camera only when it shows something new, such as a lower layer.
   Two or three camera moves per scene is plenty. End on the whole picture.
-  Wide scenes need a small yaw (10 to 15) to fit; the checker refuses a move
-  that would run off the frame.
+  The camera looks straight on. Leave `yaw` alone unless the user asks for
+  an angled look. The checker refuses a move that would run off the frame.
 - Zoom in on one part with `"camera": { "target": ["group-id"], "zoom": 1.3 }`
   and return with `{ "target": null, "zoom": 1 }`.
 - About 10 nodes and 3 layers fit one slide. Past that, split the scene or

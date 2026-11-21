@@ -32,9 +32,15 @@ bun src/cli.ts html examples/*.json -o deck.html   # a standalone deck
 open deck.html                                      # arrows, space or click
 ```
 
-[`examples/deck.html`](examples/deck.html) is that output, ready to open.
+[`examples/deck.html`](examples/deck.html) is that output, ready to open once
+you have cloned the repo (GitHub shows an HTML file as text, not as a page).
+
+- **[Tutorial](docs/tutorial.md)**: build your first scene in seven short parts.
+- **[Gallery](docs/gallery.md)**: every example playing as a GIF, viewable on GitHub.
 
 ## Examples
+
+All of these play in the [gallery](docs/gallery.md).
 
 | Spec | Shows |
 |---|---|
@@ -51,12 +57,15 @@ open deck.html                                      # arrows, space or click
 
 | View | What it is | Good for |
 |---|---|---|
-| `3d` (default) | perspective, with a camera the steps can turn and tilt | presenting; showing layers |
+| `3d` (default) | perspective, looking straight on; steps can tilt and zoom the camera | presenting; showing layers |
 | `iso` | true isometric: a fixed 45 degree camera and no perspective, so equal lengths stay equal | the classic architecture-diagram look; print |
 | `flat` | straight down; layers become bands, top layer first | documents; simple flows |
 
 Set `"view"` in the spec, `--view` on the command line, or `view="iso"` on the
 tag. Any spec can be drawn all three ways.
+
+The 3D view faces the scene square on, so rows stay level and text stays
+upright. For an angled look, turn it: `"camera": { "yaw": 22 }` (-45 to 45).
 
 | Flat | Isometric | 3D |
 |---|---|---|
@@ -208,8 +217,9 @@ Any other vendor's set works the same way: a pack is a JSON object of
 
 ![The agent loop in the dark theme](docs/agent-loop-dark.png)
 
-The full format, the colour meanings and the six moves (`show`, `hide`,
-`focus`, `pulse`, `camera`, `caption`) are in
+The [tutorial](docs/tutorial.md) builds a scene like this one part at a time.
+The full format, the colour meanings and the seven moves (`show`, `hide`,
+`focus`, `pulse`, `callout`, `camera`, `caption`) are in
 [`skill/scene-plates/SKILL.md`](skill/scene-plates/SKILL.md). That file is also
 a ready-made skill for Claude Code: copy the `scene-plates` folder into your
 skills folder and set `SCENE_PLATES_HOME` to where you cloned this repo.

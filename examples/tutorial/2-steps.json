@@ -1,0 +1,18 @@
+{
+  "title": "Uploading a photo",
+  "description": "A phone sends a photo to an upload service, which passes it to a resizer.",
+  "nodes": [
+    {"id": "phone", "label": "PHONE", "sub": "takes the photo", "at": [0, 0]},
+    {"id": "upload", "label": "UPLOAD", "sub": "receives the file", "at": [3.4, 0]},
+    {"id": "resize", "label": "RESIZE", "sub": "makes small copies", "at": [6.8, 0]}
+  ],
+  "edges": [
+    {"from": "phone", "to": "upload", "label": "photo"},
+    {"from": "upload", "to": "resize"}
+  ],
+  "steps": [
+    {"caption": "It starts with a photo on a phone.", "show": ["phone"]},
+    {"caption": "The phone sends it to the upload service.", "show": ["upload"], "pulse": ["phone>upload"]},
+    {"caption": "The service hands it on to be resized.", "show": ["resize"], "pulse": ["upload>resize"]}
+  ]
+}

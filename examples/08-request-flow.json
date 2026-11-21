@@ -26,7 +26,7 @@
     {"caption": "The gateway checks the token before anything else runs.", "show": ["gateway"], "pulse": ["client>gateway"]},
     {"caption": "A bad token stops here. Nothing behind the gateway is touched.", "show": ["reject"], "focus": ["gateway", "reject"], "pulse": ["gateway>reject"]},
     {"caption": "A good token goes through to the service.", "show": ["service"], "pulse": ["gateway>service"]},
-    {"caption": "The service reads from the data layer underneath.", "show": ["data"], "focus": ["service", "db"], "pulse": ["service>db"], "camera": {"yaw": 32, "pitch": 32}},
-    {"caption": "The whole path: checked once, then served from data.", "camera": {"yaw": 22, "pitch": 38}}
+    {"caption": "The service reads from the data layer underneath.", "show": ["data"], "focus": ["service", "db"], "pulse": ["service>db"], "camera": {"pitch": 32}},
+    {"caption": "The whole path: checked once, then served from data.", "camera": {"pitch": 38}}
   ]
 }

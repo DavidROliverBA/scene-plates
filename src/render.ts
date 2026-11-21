@@ -78,7 +78,12 @@ export function renderFrame(scene: Scene, o: FrameOpts = {}): string {
   const out: string[] = [];
   const open = (a: number) => (a < 0.995 ? `<g opacity="${a.toFixed(2)}">` : '<g>');
 
-  const sideX = (b: Box) => (v.st > 0.001 ? b.x0 : v.st < -0.001 ? b.x1 : null);
+  // Which side face can be seen. Turned, it is the same for every box. Straight on
+  // with perspective, boxes left of centre show their right side and the reverse.
+  const sideX = (b: Box) => {
+    const lean = (x: number) => P([x, b.y0, b.z1])[0] - P([x, b.y1, b.z1])[0];
+    return lean(b.x0) < -0.3 ? b.x0 : lean(b.x1) > 0.3 ? b.x1 : null;
+  };
   const faces = (b: Box, top: string, front: string, side: string, stroke: string, topOpacity = 1, sw = 0) => {
     const sx = sideX(b);
     let s = '';

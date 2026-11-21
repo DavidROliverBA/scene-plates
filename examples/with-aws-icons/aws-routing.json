@@ -2,7 +2,7 @@
   "title": "Popular AWS services, and how the lines are routed",
   "subtitle": "Each step shows one routing rule, with official AWS icons",
   "description": "Twenty-seven AWS services on a grid: an edge of CloudFront and WAF; API Gateway with Cognito; compute in Step Functions, Lambda and ECS; data in DynamoDB, ElastiCache and Aurora; messaging through SQS, EventBridge, SNS and SES; analytics with Athena over S3. The steps explain the rules that keep twenty-nine connecting lines from crossing.",
-  "camera": {"yaw": 14, "pitch": 46},
+  "camera": {"pitch": 46},
   "nodes": [
     {"id": "dns", "label": "ROUTE 53", "sub": "names to addresses", "kind": "quiet", "icon": "aws:route-53", "at": [0, 0.0], "size": [2.6, 1]},
     {"id": "site", "label": "S3 SITE", "sub": "static pages", "kind": "quiet", "icon": "aws:s3", "at": [12, 0.0], "size": [2.6, 1], "shape": "cylinder"},
