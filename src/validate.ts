@@ -5,7 +5,7 @@ import { tokens as T } from './tokens';
 import { EDGE_KINDS, NODE_KINDS, VIEWS, type CameraSpec, type Spec, type View } from './spec';
 import { edgeId, textArea, type Box, type LEdge } from './layout';
 import { builtinIcons, hasIcon } from './icons';
-import { calloutBox, centre, compile, frameBox, lens, projector } from './scene';
+import { calloutBox, centre, compile, frameBox, projector } from './scene';
 
 type Rect = [number, number, number, number];
 const EPS = 0.02;
@@ -136,10 +136,25 @@ export function validate(spec: Spec, view?: View): string[] {
   // --- Geometry ----------------------------------------------------------
   const scene = compile(spec, view), { model } = scene;
 
-  // With perspective, the furthest box is the smallest; that is the one that must stay readable.
-  const far = lens(scene.states[0].cam, scene.fit.anchor), smallest = scene.fit.scale * Math.min(...model.nodes.map((n) => far.k(centre(n.box))));
-  if (smallest < T.minScale) {
-    bad(`The scene is too big for one slide in the ${model.view} view: the smallest labels would be about ${Math.round(smallest * T.text.label)}px on a 1280px frame. Split it into two scenes or move nodes closer.`);
+  // Every box must be large enough to read at some point: either the whole scene
+  // fits at a readable size, or some step moves the camera in on it.
+  const F0 = T.frame, read = new Set<string>();
+  for (const st of scene.states) {
+    const P = projector(scene, st.cam);
+    for (const n of model.nodes) {
+      const c: [number, number, number] = [(n.box.x0 + n.box.x1) / 2, (n.box.y0 + n.box.y1) / 2, n.box.z1], [x, y] = P(c);
+      if (st.visible.has(n.id) && x > 30 && x < F0.w - 30 && y > 30 && y < F0.h - F0.captionBand + 20 && P.scaleAt(c) >= T.minScale - 0.5) read.add(n.id);
+    }
+  }
+  const unread = model.nodes.filter((n) => !read.has(n.id));
+  if (unread.length) {
+    const P0 = projector(scene, { ...scene.states[0].cam, zoom: 1, target: null });
+    const smallest = Math.min(...model.nodes.map((n) => P0.scaleAt(centre(n.box)))), need = (T.minScale / smallest).toFixed(1);
+    if (unread.length === model.nodes.length && !scene.states.some((st) => st.cam.zoom > 1.001)) {
+      bad(`The scene is too big to read on one slide in the ${model.view} view: the smallest labels would be about ${Math.round(smallest * T.text.label)}px on a 1280px frame. Split it, move nodes closer, or tour it: add steps with "camera": { "target": [ids], "zoom": ${need} } until every node has been seen up close.`);
+    } else {
+      bad(`Never large enough to read in the ${model.view} view (${unread.length} of ${model.nodes.length}): ${unread.map((n) => n.id).join(', ')}. ${Number(need) > 1 ? `Add or widen steps that zoom in on them ("camera": { "target": [ids], "zoom": ${need} or more }).` : 'They are off the frame in every step; add a step whose camera target includes them.'}`);
+    }
   }
   for (const n of model.nodes) {
     const room = textArea(n).room;
@@ -230,7 +245,10 @@ export function validate(spec: Spec, view?: View): string[] {
       const targetNodes = model.byId.has(c.spec.on) ? [c.spec.on] : model.groups.find((g) => g.id === c.spec.on)?.nodes ?? [];
       if (!targetNodes.some((id) => st.visible.has(id))) bad(`${where}: callout "${c.id}" points at "${c.spec.on}", which is not on screen yet.`);
       const r: Rect = [b.x, b.y, b.x + b.w, b.y + b.h];
-      if (r[0] < 8 || r[1] < 6 || r[2] > F.w - 8 || r[3] > F.h - F.captionBand + 30) bad(`${where}: callout "${c.id}" falls outside the frame. Change its "side" or "gap".`);
+      // The title block, estimated from its text; a callout may share the top band but not sit on the words.
+      const words: Rect = scene.showTitle && spec.title ? [F.marginX, 0, F.marginX + Math.max(spec.title.length * T.title.size * 0.5, (spec.subtitle?.length ?? 0) * T.title.subSize * 0.47) + 8, spec.subtitle ? T.title.bandSub - 12 : T.title.band - 12] : [0, 0, 0, 0];
+      if (rectsOverlap(r, words)) bad(`${where}: callout "${c.id}" sits on the title. Change its "side" or "gap".`);
+      if (r[0] < 8 || r[1] < 6 || r[2] > F.w - 8 || r[3] > F.h - F.captionBand + 16) bad(`${where}: callout "${c.id}" falls outside the frame. Change its "side" or "gap".`);
       for (const n of model.nodes) {
         if (!st.visible.has(n.id)) continue;
         const t = n.box, top = ([[t.x0, t.y0], [t.x1, t.y0], [t.x1, t.y1], [t.x0, t.y1]] as [number, number][]).map(([x, y]) => P([x, y, t.z1]));

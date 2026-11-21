@@ -117,7 +117,7 @@ icon colours.
 | `hide` | — | removes them again |
 | `focus` | this step | everything else dims |
 | `pulse` | this step | a dot travels along these edges |
-| `camera` | until changed | `yaw` (-45 to 45), `pitch` (25 to 70), `zoom`, `target` (ids to centre on, `null` to reset). Yaw and pitch apply in the 3d view only |
+| `camera` | until changed | `yaw` (-45 to 45), `pitch` (25 to 70), `zoom` (up to 4), `target` (ids to centre on, `null` to reset). Yaw and pitch apply in the 3d view only |
 | `callout` | this step | shows these callout ids (see below) |
 | `caption` | this step | one sentence under the scene, 84 characters at most |
 
@@ -137,6 +137,24 @@ at the top left of the frame.
 One callout per step is plenty. If the checker says it covers a box or leaves
 the frame, change `side` or `gap`.
 
+## Big scenes (more than about ten nodes)
+
+A scene too big to read whole is allowed if it is a **tour**: every node must
+be large enough to read in at least one step. Seen whole, the runtime hides
+small words and enlarges group labels, so the first step works as a map.
+
+- Lay it out as rows of areas on one layer: columns 4 apart, rows 2.8 apart,
+  every node in a group, one group per run of neighbours in a row.
+- Join neighbours only (left, right, or straight up and down). For the rare
+  longer line use `"via": "y"` with a `channel` in the gap between two rows,
+  and an `offset` so it does not share a path with a line already there.
+- Step 1 shows everything. Then one step per area or pair of areas:
+  `"camera": { "target": [ids], "zoom": Z }` with `focus` or `pulse` on what
+  the caption is about. Finish with `{ "target": null, "zoom": 1 }`.
+- If the checker says "Never large enough to read", it lists the nodes and
+  the zoom to use. Add a stop or widen a target.
+- Keep group labels short (one word); callouts short and above an empty cell.
+
 ## Rules
 
 - Labels are UPPERCASE and short (about 14 characters on a default node);
@@ -150,8 +168,8 @@ the frame, change `side` or `gap`.
   that would run off the frame.
 - Zoom in on one part with `"camera": { "target": ["group-id"], "zoom": 1.3 }`
   and return with `{ "target": null, "zoom": 1 }`.
-- At most about 10 nodes and 3 layers per scene. The checker refuses scenes
-  whose labels would be too small; split them into two scenes.
+- About 10 nodes and 3 layers fit one slide. Past that, split the scene or
+  make it a tour (see Big scenes).
 - Red means fail-closed and nothing else.
 
 ## Embedding in an existing deck or page

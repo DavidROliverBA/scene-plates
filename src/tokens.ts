@@ -38,6 +38,9 @@ export const tokens = {
   plateSpacing: 0.06, // extra space between the letters of a plate label
   minScale: 56, // px per unit; below this labels (11px on a 1280 frame, 17px on full HD) are too small for a slide
   maxScale: 125,
+  // Level of detail, as fractions of minScale. A big scene seen whole shows its
+  // boxes, icons and enlarged area names; words appear as the camera moves in.
+  lod: { subFrom: 0.68, labelFrom: 0.5, labelTo: 0.72, plateLabelPx: 13, plateLabelMax: 0.4 },
 
   font: {
     label: "ui-monospace, 'SF Mono', Menlo, Consolas, monospace",
@@ -51,7 +54,7 @@ export const tokens = {
   // Default camera, and the range in which labels stay readable.
   // persp is 1 / camera distance in grid units: 0 is no perspective, bigger is stronger.
   isometric: { yaw: 45, pitch: 35.264 }, // the one true isometric angle
-  camera: { yaw: 22, pitch: 38, zoom: 1, persp: 0.03, yawRange: [-45, 45], pitchRange: [25, 70], zoomRange: [0.6, 2.2] },
+  camera: { yaw: 22, pitch: 38, zoom: 1, persp: 0.03, yawRange: [-45, 45], pitchRange: [25, 70], zoomRange: [0.6, 4] },
 
   // Motion. Every move uses these and only these.
   motion: { step: 750, drop: 0.7, pulse: 1700, dim: 0.2, morph: 1400 },

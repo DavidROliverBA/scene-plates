@@ -152,10 +152,12 @@ export function frameBox(scene: Scene, cam: Cam): [number, number, number, numbe
 }
 
 // World point to frame pixels for a settled camera.
-export function projector(scene: Scene, cam: Cam): (p: Vec3) => [number, number] {
+export function projector(scene: Scene, cam: Cam) {
   const t = cam.target ? targetPoint(scene.model, cam.target) : null;
   const L = lens(cam, t ?? scene.fit.anchor), AS = t ? scene.fit.centre : scene.fit.anchorScreen, S = scene.fit.scale * cam.zoom;
-  return (p) => { const r = L.r(p); return [AS[0] + S * r[0], AS[1] + S * r[1]]; };
+  const P = (p: Vec3): [number, number] => { const r = L.r(p); return [AS[0] + S * r[0], AS[1] + S * r[1]]; };
+  // scaleAt: pixels per grid unit at that point, which decides whether its words can be read.
+  return Object.assign(P, { scaleAt: (p: Vec3) => S * L.k(p) });
 }
 
 export function wrapText(text: string, max: number): string[] {
@@ -172,8 +174,12 @@ export function wrapText(text: string, max: number): string[] {
 export function calloutBox(c: LCallout, a: [number, number]) {
   const K = T.callout, lines = wrapText(c.spec.text, K.wrap), gap = c.spec.gap ?? K.gap;
   const w = Math.max(...lines.map((l) => l.length), 4) * K.charWidth + 2 * K.padX, h = lines.length * K.lineHeight + 2 * K.padY;
-  const x = c.side === 'left' ? a[0] - gap - w : c.side === 'right' ? a[0] + gap : a[0] - w / 2;
+  const F = T.frame, edge = 14;
+  const slide = (v: number, size: number, max: number) => Math.min(Math.max(v, edge), Math.max(edge, max - edge - size));
+  // A box above or below its target slides sideways to stay in the frame; its line still meets the target.
+  const x = c.side === 'left' ? a[0] - gap - w : c.side === 'right' ? a[0] + gap : slide(a[0] - w / 2, w, F.w);
   const y = c.side === 'up' ? a[1] - gap - h : c.side === 'down' ? a[1] + gap : a[1] - h / 2;
-  const end: [number, number] = c.side === 'up' ? [a[0], y + h] : c.side === 'down' ? [a[0], y] : c.side === 'left' ? [x + w, a[1]] : [x, a[1]];
+  const meet = Math.min(Math.max(a[0], x + 14), x + w - 14);
+  const end: [number, number] = c.side === 'up' ? [meet, y + h] : c.side === 'down' ? [meet, y] : c.side === 'left' ? [x + w, a[1]] : [x, a[1]];
   return { x, y, w, h, lines, end };
 }

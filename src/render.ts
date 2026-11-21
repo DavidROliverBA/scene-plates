@@ -67,8 +67,12 @@ export function renderFrame(scene: Scene, o: FrameOpts = {}): string {
     const [x, y] = P(at), k = (S * L.k(at)) / scale;
     return [v.ux[0] * k, v.ux[1] * k, v.uy[0] * k, v.uy[1] * k, x, y].map((n) => n.toFixed(4)).join(' ');
   };
-  const flat = (at: Vec3, text: string, size: number, fill: string, anchor: string, extra = '') =>
-    `<text transform="matrix(${faceMatrix(at, 100)})" font-size="${f(size * 100)}" text-anchor="${anchor}" fill="${fill}"${extra}>${esc(text)}</text>`;
+  const flat = (at: Vec3, text: string, size: number, fill: string, anchor: string, extra = '', alpha = 1) =>
+    alpha < 0.02 ? '' : `<text transform="matrix(${faceMatrix(at, 100)})" font-size="${f(size * 100)}" text-anchor="${anchor}" fill="${fill}"${alpha < 0.98 ? ` opacity="${alpha.toFixed(2)}"` : ''}${extra}>${esc(text)}</text>`;
+  // Level of detail: how readable words would be at this point, 0 (leave them out) to 1.
+  const local = (at: Vec3) => (S * L.k(at)) / T.minScale;
+  const fine = (at: Vec3) => clamp((local(at) - T.lod.subFrom) / (1 - T.lod.subFrom), 0, 1); // sub-labels, line labels
+  const bold = (at: Vec3) => clamp((local(at) - T.lod.labelFrom) / (T.lod.labelTo - T.lod.labelFrom), 0, 1); // node labels
 
   const a0 = alphas(scene, prev), a1 = alphas(scene, cur);
   const out: string[] = [];
@@ -109,7 +113,12 @@ export function renderFrame(scene: Scene, o: FrameOpts = {}): string {
     if (a < 0.01) return;
     const b = g.box;
     let s = open(a) + faces(b, th.plate, th.plateStroke, mix(th.plateStroke, th.shade, 0.25), th.plateStroke, 0.62);
-    if (g.spec.label) s += flat([b.x0 + 0.2, b.y1 - 0.17, b.z1], g.spec.label, T.text.plate, th.muted, 'start', ` letter-spacing="${T.plateSpacing * 100}"`);
+    if (g.spec.label) {
+      // Seen from far off, the area name grows (as far as its plate allows) so the map still reads.
+      const at: Vec3 = [b.x0 + 0.2, b.y1 - 0.17, b.z1], want = Math.min(T.lod.plateLabelMax, T.lod.plateLabelPx / (S * L.k(at)));
+      const size = Math.max(T.text.plate, Math.min(want, (b.x1 - b.x0 - 0.4) / (g.spec.label.length * (T.charWidth + T.plateSpacing / T.text.plate))));
+      s += flat(at, g.spec.label, size, size > T.text.plate * 1.05 ? th.ink : th.muted, 'start', ` letter-spacing="${f((T.plateSpacing / T.text.plate) * size * 100)}"`);
+    }
     out.push(s + '</g>');
   };
 
@@ -123,7 +132,7 @@ export function renderFrame(scene: Scene, o: FrameOpts = {}): string {
     let s = open(a) + (n.spec.shape === 'cylinder'
       ? cylinder(b, tint, col, mix(col, th.surface, 0.45), col, sw)
       : faces(b, tint, col, mix(col, th.shade, 0.3), col, 1, sw));
-    const area = textArea({ ...n, box: b }), cy = (b.y0 + b.y1) / 2, L = T.text.label;
+    const area = textArea({ ...n, box: b }), cy = (b.y0 + b.y1) / 2, LS = T.text.label, mid: Vec3 = [area.cx, cy, b.z1];
     if (area.iconAt && n.spec.icon) {
       const at: Vec3 = [area.iconAt[0], area.iconAt[1], b.z1], I = T.icon;
       const d = iconPath(n.spec.icon), img = iconImage(n.spec.icon);
@@ -132,10 +141,10 @@ export function renderFrame(scene: Scene, o: FrameOpts = {}): string {
       else if (img) s += `<image href="${img}" width="64" height="64" transform="matrix(${faceMatrix(at, 64 / I.size)})"/>`;
     }
     if (n.spec.sub) {
-      s += flat([area.cx, cy - 0.03, b.z1], n.spec.label, L, col, 'middle', ' font-weight="700"');
-      s += flat([area.cx, cy + 0.2, b.z1], n.spec.sub, T.text.sub, th.muted, 'middle');
+      s += flat([area.cx, cy - 0.03, b.z1], n.spec.label, LS, col, 'middle', ' font-weight="700"', bold(mid));
+      s += flat([area.cx, cy + 0.2, b.z1], n.spec.sub, T.text.sub, th.muted, 'middle', '', fine(mid));
     } else {
-      s += flat([area.cx, cy + L * 0.35, b.z1], n.spec.label, L, col, 'middle', ' font-weight="700"');
+      s += flat([area.cx, cy + LS * 0.35, b.z1], n.spec.label, LS, col, 'middle', ' font-weight="700"', bold(mid));
     }
     out.push(s + '</g>');
   };
@@ -191,12 +200,12 @@ export function renderFrame(scene: Scene, o: FrameOpts = {}): string {
     let s = open(p === 0 && draw ? q * lineAlpha : a);
     s += `<polyline points="${pts2(scr)}" fill="none" stroke="${col}" stroke-width="${f(width)}" stroke-linejoin="round" stroke-linecap="round"${dash ? ` stroke-dasharray="${dash}"` : draw}/>${head}`;
     if (ed.label && ed.spec.label) {
-      const lc = ed.kind === 'flow' ? th.muted : col;
-      if (ed.riser) {
+      const lc = ed.kind === 'flow' ? th.muted : col, la = fine(ed.label.at);
+      if (la < 0.02) { /* too small to read: leave the words out */ } else if (ed.riser) {
         const m = P(ed.label.at), dx = ed.label.anchor === 'end' ? -14 : 14;
-        s += `<text x="${f(m[0] + dx)}" y="${f(m[1] + 4)}" font-size="${f(T.text.edge * S * L.k(ed.label.at))}" text-anchor="${ed.label.anchor}" fill="${lc}" stroke="${th.bg}" stroke-width="3.5" paint-order="stroke">${esc(ed.spec.label)}</text>`;
+        s += `<text x="${f(m[0] + dx)}" y="${f(m[1] + 4)}" font-size="${f(T.text.edge * S * L.k(ed.label.at))}" text-anchor="${ed.label.anchor}" fill="${lc}" stroke="${th.bg}" stroke-width="3.5" paint-order="stroke" opacity="${la.toFixed(2)}">${esc(ed.spec.label)}</text>`;
       } else {
-        s += flat(ed.label.at, ed.spec.label, T.text.edge, lc, ed.label.anchor);
+        s += flat(ed.label.at, ed.spec.label, T.text.edge, lc, ed.label.anchor, '', la);
       }
     }
     if (pulsing && !(p === 0 && e < 1)) { // wait until a new edge has finished drawing
@@ -232,10 +241,22 @@ export function renderFrame(scene: Scene, o: FrameOpts = {}): string {
     model.edges.filter((x) => x.plane === plane && x.riser).forEach(drawEdge);
     model.nodes.filter((n) => n.plane === plane).sort((x, y) => far(y.box) - far(x.box)).forEach(drawNode);
   }
-  model.callouts.forEach(drawCallout);
+  const scenery = out.join('');
+  out.length = 0;
+  model.callouts.forEach(drawCallout); // drawn after the bands below, so a callout near the top is never hidden
 
   const F = T.frame;
   let hud = '';
+  if (!o.bare) {
+    // When the camera moves in, the scene runs past the edges of the frame. Soft
+    // bands keep it from running under the title and the caption.
+    const top = scene.showTitle && scene.spec.title ? (scene.spec.subtitle ? T.title.bandSub : T.title.band) - 8 : 0, low = F.h - F.captionBand + 16, fade = 26;
+    const grad = (id: string, from: number, to: number) => `<linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${th.bg}" stop-opacity="${from}"/><stop offset="1" stop-color="${th.bg}" stop-opacity="${to}"/></linearGradient>`;
+    hud += `<defs>${grad('sp-fade-up', 1, 0)}${grad('sp-fade-down', 0, 1)}</defs>`;
+    if (top) hud += `<rect width="${F.w}" height="${top}" fill="${th.bg}"/><rect y="${top}" width="${F.w}" height="${fade}" fill="url(#sp-fade-up)"/>`;
+    hud += `<rect y="${low - fade}" width="${F.w}" height="${fade}" fill="url(#sp-fade-down)"/><rect y="${low}" width="${F.w}" height="${F.h - low}" fill="${th.bg}"/>`;
+  }
+  hud += out.join('');
   if (scene.showTitle && scene.spec.title) {
     hud += `<text x="${F.marginX}" y="${T.title.y}" font-family="${T.font.caption}" font-size="${T.title.size}" font-weight="650" fill="${th.ink}">${esc(scene.spec.title)}</text>`;
     if (scene.spec.subtitle) hud += `<text x="${F.marginX}" y="${T.title.subY}" font-family="${T.font.caption}" font-size="${T.title.subSize}" fill="${th.muted}">${esc(scene.spec.subtitle)}</text>`;
@@ -253,7 +274,7 @@ export function renderFrame(scene: Scene, o: FrameOpts = {}): string {
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${F.w} ${F.h}" role="img" aria-label="${esc(label)}" font-family="${T.font.label}" stroke-linejoin="round" stroke-width="${T.stroke.face}" style="display:block;width:100%;height:auto">` +
     (o.bare ? '' : `<rect width="${F.w}" height="${F.h}" fill="${th.bg}"/>`) +
-    out.join('') + hud + '</svg>'
+    scenery + hud + '</svg>'
   );
 }
 

@@ -246,3 +246,36 @@ test('moving between 3d and iso keeps the lines on screen throughout', async () 
   expect(mid).not.toContain('NaN');
   expect(renderMorph(d3, iso, 1, { step: 5 })).toBe(renderFrame(iso, { step: 5, edgeAlpha: 1 }));
 });
+
+// --- big scenes: level of detail and guided tours ---------------------------
+test('a big scene is refused whole, accepted as a tour, and names what a tour misses', async () => {
+  const spec = await load('10-platform-50.json');
+  expect(spec.nodes.length).toBe(50);
+  for (const v of ['3d', 'iso', 'flat'] as const) expect(validate(spec, v)).toEqual([]);
+  const whole = { ...spec, steps: [{ show: spec.nodes.map((n) => n.id) }], callouts: [] };
+  expect(has(validate(whole), 'too big to read on one slide')).toBe(true);
+  expect(has(validate(whole), 'tour it')).toBe(true);
+  const short = { ...spec, steps: spec.steps!.slice(0, 3) }; // the map and only two stops
+  const errs = validate(short);
+  expect(has(errs, 'Never large enough to read')).toBe(true);
+  expect(has(errs, 'pipeline')).toBe(true);
+  expect(has(errs, 'cdn,')).toBe(false); // the stops it does have still count
+});
+test('seen whole, a big scene shows area names but not small words; up close it shows them', async () => {
+  const scene = compile(await load('10-platform-50.json'));
+  const far = renderFrame(scene, { step: 0 }), near = renderFrame(scene, { step: 6 });
+  expect(far).toContain('>FINANCE</text>');
+  expect(far).not.toContain('>LEDGER</text>');
+  expect(far).not.toContain('>money records</text>');
+  expect(near).toContain('>LEDGER</text>');
+  expect(near).toContain('>money records</text>');
+});
+test('a callout near the edge slides to stay inside the frame', () => {
+  const s = base();
+  s.callouts = [{ id: 'note', text: 'A fairly long note that makes a wide box.', on: 'b', side: 'down' }];
+  s.steps = [{ show: ['a', 'b'], callout: ['note'], camera: { target: ['a'], zoom: 2.2 } }];
+  const m = renderFrame(compile(s)).match(/<rect x="([\d.]+)" y="[\d.]+" width="([\d.]+)" height="[\d.]+" rx="6"/)!;
+  const anchor = Number(renderFrame(compile(s)).match(/<circle cx="([\d.]+)" cy="[\d.]+" r="4"/)![1]);
+  expect(Number(m[1]) + Number(m[2])).toBeLessThanOrEqual(1280 - 14 + 0.1);
+  expect(anchor + Number(m[2]) / 2).toBeGreaterThan(1280 - 14); // it would have overflowed if centred
+});

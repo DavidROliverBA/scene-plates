@@ -44,6 +44,7 @@ open deck.html                                      # arrows, space or click
 | `04-aws-landscape` | three layers, with a VPC plate holding public and private subnets |
 | `05-aws-events-flat`, `06-aws-events-iso`, `07-aws-events-3d` | the same scene in each of the three views |
 | `08-request-flow`, `09-agent-loop` | two layers with a fail path; a loop with a cap |
+| `10-platform-50` | fifty components in thirteen areas, shown whole and then as a guided tour |
 
 ## Three views from one spec
 
@@ -71,6 +72,26 @@ Each view suits a different shape of scene. Isometric turns a long row into a
 long diagonal, so wide scenes come out smaller; flat cannot stack, so
 many-layered scenes come out smaller. The three-layer landscape above passes
 only in 3D.
+
+## Big scenes
+
+![Fifty components: the whole map, then a tour](docs/platform-50.gif)
+
+Fifty components do not fit one slide at a readable size, and the checker
+says so. What works is a map followed by a tour:
+
+- **Seen whole**, a big scene drops the words that would be too small and
+  enlarges the area names, so it reads as a map of boxes, icons and districts.
+- **Each step moves the camera in** on a few components
+  (`"camera": { "target": ["order", "orderdb"], "zoom": 2.4 }`), and the words
+  fade back in as they become readable.
+- **The checker's rule** is that every component must be large enough to read
+  in at least one step. It names the ones a tour has missed and the zoom needed.
+
+`10-platform-50` covers all fifty in twelve stops, in all three views. It
+draws in under a millisecond a frame. What made it tractable was layout
+discipline: one area per row segment, lines only between neighbours, and the
+few long lines routed along the gaps between rows.
 
 ## Icons, cylinders, titles and callouts
 
@@ -193,7 +214,8 @@ bun scripts/gif.ts spec.json out.gif                 # needs rsvg-convert and ff
 - Icon packs are drawn as images, so they do not take the theme's colours.
 - A line between layers needs one node directly above the other.
 - A line that spans more than one layer is drawn in front of the layers between.
-- About ten nodes and three layers fit one slide; the checker says when to split.
+- About ten nodes fit one slide at a readable size. Beyond that, tour the scene (see Big scenes) or split it.
+- Dense scenes leave little room for callouts; keep them short and put them over an empty cell.
 - Keep to one row of nodes per layer when stacking three layers, or the scene gets too tall.
 
 MIT licence.
