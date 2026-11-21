@@ -1,26 +1,29 @@
 {
   "title": "An agent loop with a cap",
+  "subtitle": "A loop closed by a check and bounded by a cap",
   "description": "An agent plans, acts and checks its own work. A failed check sends it round again, at most three times, before a person is asked. A passed check finishes the job.",
   "nodes": [
-    { "id": "plan", "label": "PLAN", "sub": "decide next step", "at": [0, 0] },
-    { "id": "act", "label": "ACT", "sub": "call a tool", "at": [3.4, 0] },
-    { "id": "check", "label": "CHECK", "sub": "did it work?", "kind": "gate", "at": [6.8, 0] },
-    { "id": "done", "label": "DONE", "sub": "result returned", "kind": "success", "at": [10.2, 0] },
-    { "id": "person", "label": "ASK A PERSON", "sub": "out of tries", "kind": "fail", "at": [6.8, -2.1] }
+    {"id": "plan", "label": "PLAN", "sub": "decide next step", "at": [0, 0]},
+    {"id": "act", "label": "ACT", "sub": "call a tool", "at": [3.4, 0]},
+    {"id": "check", "label": "CHECK", "sub": "did it work?", "kind": "gate", "at": [6.8, 0]},
+    {"id": "done", "label": "DONE", "sub": "result returned", "kind": "success", "at": [10.2, 0]},
+    {"id": "person", "label": "ASK A PERSON", "sub": "out of tries", "kind": "fail", "at": [6.8, -2.1]}
   ],
-  "groups": [{ "id": "agent", "label": "AGENT", "contains": ["plan", "act", "check"] }],
+  "groups": [
+    {"id": "agent", "label": "AGENT", "contains": ["plan", "act", "check"]}
+  ],
   "edges": [
-    { "from": "plan", "to": "act" },
-    { "from": "act", "to": "check" },
-    { "from": "check", "to": "done", "kind": "pass", "label": "pass" },
-    { "from": "check", "to": "plan", "kind": "loop", "via": "y", "channel": 1.75, "label": "try again, max 3 times", "hold": true },
-    { "from": "check", "to": "person", "kind": "fail", "label": "3 fails", "hold": true }
+    {"from": "plan", "to": "act"},
+    {"from": "act", "to": "check"},
+    {"from": "check", "to": "done", "kind": "pass", "label": "pass"},
+    {"from": "check", "to": "plan", "kind": "loop", "via": "y", "channel": 1.75, "label": "try again, max 3 times", "hold": true},
+    {"from": "check", "to": "person", "kind": "fail", "label": "3 fails", "hold": true}
   ],
   "steps": [
-    { "caption": "The agent plans a step, acts on it, then checks the result.", "show": ["agent"], "pulse": ["plan>act", "act>check"] },
-    { "caption": "A failed check sends it round again, but never more than three times.", "show": ["check>plan"], "pulse": ["check>plan"], "camera": { "pitch": 46 } },
-    { "caption": "After three failures it stops and asks a person.", "show": ["person", "check>person"], "focus": ["check", "person"], "pulse": ["check>person"] },
-    { "caption": "A passed check ends the loop and returns the result.", "show": ["done"], "focus": ["check", "done"], "pulse": ["check>done"] },
-    { "caption": "The loop is closed by a check and bounded by a cap.", "camera": { "pitch": 38 } }
+    {"caption": "The agent plans a step, acts on it, then checks the result.", "show": ["agent"], "pulse": ["plan>act", "act>check"]},
+    {"caption": "A failed check sends it round again, but never more than three times.", "show": ["check>plan"], "pulse": ["check>plan"], "camera": {"pitch": 46}},
+    {"caption": "After three failures it stops and asks a person.", "show": ["person", "check>person"], "focus": ["check", "person"], "pulse": ["check>person"]},
+    {"caption": "A passed check ends the loop and returns the result.", "show": ["done"], "focus": ["check", "done"], "pulse": ["check>done"]},
+    {"caption": "The loop is closed by a check and bounded by a cap.", "camera": {"pitch": 38}}
   ]
 }

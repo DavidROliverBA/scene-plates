@@ -14,7 +14,7 @@ camera and the animation. Because no one writes drawing code per diagram:
   graphics code, and an edit is a few changed lines.
 - **Bad diagrams are refused.** A checker rejects overlapping boxes, crossing
   lines, labels that do not fit, text too small to read, and loops with no cap.
-- **Nothing to install on the page.** One 25 KB script, no other libraries, no
+- **Nothing to install on the page.** One 40 KB script, no other libraries, no
   network. It also renders stills and GIFs from the command line.
 
 It is a parallel-projection 3D view drawn as SVG, not WebGL. That keeps text
@@ -58,6 +58,58 @@ spec can be drawn either way: `--view flat` on the command line, or
 
 Stacking is what 3D buys: the three-layer landscape above fits a slide in 3D
 and is refused as too small to read when drawn flat.
+
+Add the `toggle` attribute and the scene gets a small button (and the F key)
+that switches between the two while you present. Lines fade out, the boxes and
+camera move across, and the other drawing's lines fade in. The button only
+appears when the scene passes the checker both ways. Decks made with
+`html` have it on; `--no-toggle` leaves it off.
+
+## Icons, cylinders, titles and callouts
+
+```json
+{ "id": "table", "label": "DYNAMODB", "sub": "keeps the data", "kind": "success",
+  "shape": "cylinder", "icon": "database", "at": [8, 0], "size": [2.6, 1] }
+```
+
+- **Icons.** 24 built-in line icons, tinted with the node's colour: `user`,
+  `globe`, `server`, `database`, `storage`, `function`, `queue`, `gateway`,
+  `shield`, `lock`, `cloud`, `bolt`, `search`, `gear`, `balance`, `document`,
+  `mail`, `clock`, `check`, `stop`, `container`, `cart`, `card`, `code`. An icon
+  takes about 0.6 of a node's width, so nodes with icons are usually 2.6 wide.
+- **Cylinders.** `"shape": "cylinder"` for databases and stores.
+- **Titles.** `title` and an optional `subtitle` are drawn inside the frame,
+  so stills and GIFs carry them. `notitle` on the tag leaves them out for
+  slides that have their own heading.
+- **Callouts.** A note joined to a node or plate by a line, shown for one step:
+
+```json
+"callouts": [{ "id": "why", "text": "The limit is a rule, so no person is needed here.", "on": "limit", "side": "up" }],
+"steps": [{ "caption": "...", "show": ["limit"], "callout": ["why"] }]
+```
+
+  The checker refuses a callout that leaves the frame, covers a box, or
+  points at something not yet on screen.
+
+## AWS icons
+
+The official AWS Architecture Icons are not in this repo. AWS lets customers
+and partners use them to make architecture diagrams, but does not hand out the
+right to pass the artwork on, so you import them from your own download:
+
+1. Download the "Icon package" from <https://aws.amazon.com/architecture/icons/>.
+2. `bun scripts/aws-icons.ts ~/Downloads/Icon-package_XXXX.zip`
+
+That writes `icons/aws.json` (git-ignored, about 750 icons). Then use
+`"icon": "aws:lambda"`, `"aws:s3"`, `"aws:dynamodb"`, `"aws:api-gateway"` and so
+on; the command line finds the pack by itself. A deck built with `html`
+carries only the icons its scenes use. On your own page, add
+`icons="icons/aws.json"` to the tag. See
+[`examples/with-aws-icons`](examples/with-aws-icons). Pack icons keep their
+own colours; the node's box and text still follow the colour meanings.
+
+Any other vendor's set works the same way: a pack is a JSON object of
+`"prefix:name": "<svg ...>"`.
 
 ## A spec
 
@@ -119,6 +171,7 @@ bun scripts/gif.ts spec.json out.gif                 # needs rsvg-convert and ff
 | `src/tokens.ts` | every colour, font, size and timing |
 | `src/spec.ts` | the spec format |
 | `src/layout.ts` | boxes and right-angled line routes |
+| `src/icons.ts` | built-in icons and icon packs |
 | `src/scene.ts` | camera maths and what is on screen at each step |
 | `src/validate.ts` | the checker |
 | `src/render.ts` | one frame as an SVG string |
@@ -129,7 +182,8 @@ bun scripts/gif.ts spec.json out.gif                 # needs rsvg-convert and ff
 
 ## Limits
 
-- Boxes only: no cylinders, service icons or curved lines yet. Service names go in the labels.
+- Boxes and cylinders only; lines are right-angled, never curved.
+- Icon packs are drawn as images, so they do not take the theme's colours.
 - A line between layers needs one node directly above the other.
 - A line that spans more than one layer is drawn in front of the layers between.
 - About ten nodes and three layers fit one slide; the checker says when to split.

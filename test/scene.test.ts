@@ -130,7 +130,7 @@ test('a row channel moves with its layer when drawn flat', async () => {
 });
 test('the flat and 3D AWS examples are the same scene', async () => {
   const [flat, iso] = [await load('05-aws-events-flat.json'), await load('06-aws-events-iso.json')];
-  expect({ ...flat, view: 0, title: 0 }).toEqual({ ...iso, view: 0, title: 0 } as any);
+  expect({ ...flat, view: 0, title: 0, subtitle: 0 }).toEqual({ ...iso, view: 0, title: 0, subtitle: 0 } as any);
   expect(flat.view).toBe('flat');
 });
 test('a camera move that runs off the frame is refused', () => {
@@ -141,4 +141,77 @@ test('a camera move that runs off the frame is refused', () => {
   // Either the scale shrinks to fit every angle, or the move is refused; it must never clip silently.
   const scene = compile(s);
   expect(errs.length === 0 ? scene.fit.scale < 125 : true).toBe(true);
+});
+
+// --- icons, cylinders, titles, callouts, switching view ---------------------
+import { existsSync } from 'node:fs';
+import { renderMorph } from '../src/render';
+import { registerIcons } from '../src/icons';
+
+test('an icon narrows the label room, and an unknown icon is refused', () => {
+  const s = base(); s.nodes[0].label = 'TWELVE CHARS'; s.nodes[0].icon = 'database';
+  expect(has(validate(s), 'too long')).toBe(true);
+  s.nodes[0].size = [2.6, 1]; s.nodes[1].at = [4, 0];
+  expect(validate(s)).toEqual([]);
+  expect(renderFrame(compile(s))).toContain('<path d="M4 6c0');
+  s.nodes[0].icon = 'unicorn';
+  expect(has(validate(s), 'does not exist')).toBe(true);
+  s.nodes[0].icon = 'acme:thing';
+  expect(has(validate(s), 'not loaded')).toBe(true);
+});
+test('a registered pack icon is drawn as an image', () => {
+  registerIcons({ 'acme:thing': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#123456"/></svg>' });
+  const s = base(); s.nodes[0].icon = 'acme:thing'; s.nodes[0].size = [2.6, 1]; s.nodes[1].at = [4, 0];
+  expect(validate(s)).toEqual([]);
+  expect(renderFrame(compile(s))).toContain('<image href="data:image/svg+xml,');
+});
+test('a cylinder draws a round top instead of a box', () => {
+  const s = base(); s.nodes[0].shape = 'cylinder';
+  expect(validate(s)).toEqual([]);
+  const box = renderFrame(compile(base())), round = renderFrame(compile(s));
+  expect(round.length).toBeGreaterThan(box.length + 500); // 44-point rings
+  (s.nodes[0] as any).shape = 'star';
+  expect(has(validate(s), 'box or cylinder')).toBe(true);
+});
+test('the title is drawn in the frame and can be left out', () => {
+  const s = base(); s.title = 'A plain title'; s.subtitle = 'And a subtitle';
+  expect(renderFrame(compile(s))).toContain('>A plain title</text>');
+  expect(renderFrame(compile(s))).toContain('>And a subtitle</text>');
+  expect(renderFrame(compile(s, undefined, false))).not.toContain('A plain title</text>');
+  s.title = 'x'.repeat(80);
+  expect(has(validate(s), 'title is 80')).toBe(true);
+});
+test('a callout shows for its step only, and bad callouts are refused', () => {
+  const s = base();
+  s.callouts = [{ id: 'note', text: 'Look at this box in particular.', on: 'a', side: 'up' }];
+  s.steps = [{ show: ['a', 'b'], callout: ['note'] }, {}];
+  expect(validate(s)).toEqual([]);
+  const scene = compile(s);
+  expect(renderFrame(scene, { step: 0 })).toContain('particular.');
+  expect(renderFrame(scene, { step: 1 })).not.toContain('particular.');
+  s.steps = [{ show: ['b'], callout: ['note'] }, { show: ['a'] }];
+  expect(has(validate(s), 'not on screen yet')).toBe(true);
+  s.steps = [{ show: ['a', 'b'], callout: ['note'] }];
+  s.callouts[0].gap = 900;
+  expect(has(validate(s), 'outside the frame')).toBe(true);
+  s.callouts[0] = { id: 'note', text: 'Sits right on top of the other box.', on: 'a', side: 'right', gap: 40 };
+  expect(has(validate(s), 'covers node "b"')).toBe(true);
+});
+test('switching view starts on one drawing, ends on the other, and never breaks between', async () => {
+  const spec = await load('06-aws-events-iso.json');
+  const [iso, flat] = [compile(spec, 'iso'), compile(spec, 'flat')];
+  expect(renderMorph(iso, flat, 0, { step: 5 })).toBe(renderFrame(iso, { step: 5, edgeAlpha: 1 }));
+  expect(renderMorph(iso, flat, 1, { step: 5 })).toBe(renderFrame(flat, { step: 5, edgeAlpha: 1 }));
+  for (let t = 0; t <= 1.0001; t += 0.05) {
+    const svg = renderMorph(iso, flat, t, { step: 5 });
+    expect(svg).not.toContain('NaN');
+    expect(svg).toContain('LAMBDA');
+  }
+  expect(renderMorph(flat, iso, 0.5, { step: 2 })).not.toContain('NaN');
+});
+test.skipIf(!existsSync(join(dir, '..', 'icons', 'aws.json')))('the AWS-icon example works when the pack has been imported', async () => {
+  registerIcons(await Bun.file(join(dir, '..', 'icons', 'aws.json')).json());
+  const spec: Spec = await Bun.file(join(dir, 'with-aws-icons', 'aws-simple.json')).json();
+  expect(validate(spec)).toEqual([]);
+  expect(renderFrame(compile(spec))).toContain('<image');
 });

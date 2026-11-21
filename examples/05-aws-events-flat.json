@@ -1,34 +1,38 @@
 {
-  "title": "AWS drawn flat: an event-driven write path",
+  "title": "An event-driven write path",
+  "subtitle": "AWS drawn flat. Press F, or the button, to see it in 3D.",
   "view": "flat",
   "description": "An API Gateway call triggers a Lambda that writes to DynamoDB. Failed events go to a dead-letter queue. On the layer below, a table stream feeds an indexer that keeps OpenSearch up to date.",
   "nodes": [
-    { "id": "client", "label": "CLIENT", "sub": "sends a change", "kind": "quiet", "at": [0, 0], "layer": 1 },
-    { "id": "api", "label": "API GATEWAY", "sub": "validates input", "kind": "gate", "at": [3.6, 0], "layer": 1 },
-    { "id": "fn", "label": "LAMBDA", "sub": "applies the change", "at": [7.2, 0], "layer": 1 },
-    { "id": "dlq", "label": "SQS DLQ", "sub": "kept for replay", "kind": "fail", "at": [10.8, 0], "layer": 1 },
-    { "id": "table", "label": "DYNAMODB", "sub": "source of truth", "kind": "success", "at": [7.2, 0], "layer": 0 },
-    { "id": "indexer", "label": "INDEXER", "sub": "lambda on stream", "at": [3.6, 0], "layer": 0 },
-    { "id": "search", "label": "OPENSEARCH", "sub": "fast lookups", "kind": "quiet", "at": [0, 0], "layer": 0 }
+    {"id": "client", "label": "CLIENT", "sub": "sends a change", "kind": "quiet", "at": [0, 0], "layer": 1, "size": [2.6, 1], "icon": "user"},
+    {"id": "api", "label": "API GATEWAY", "sub": "validates input", "kind": "gate", "at": [4, 0], "layer": 1, "size": [2.6, 1], "icon": "gateway"},
+    {"id": "fn", "label": "LAMBDA", "sub": "applies the change", "at": [8, 0], "layer": 1, "size": [2.6, 1], "icon": "function"},
+    {"id": "dlq", "label": "SQS DLQ", "sub": "kept for replay", "kind": "fail", "at": [12, 0], "layer": 1, "size": [2.6, 1], "icon": "queue"},
+    {"id": "table", "label": "DYNAMODB", "sub": "source of truth", "kind": "success", "at": [8, 0], "layer": 0, "size": [2.6, 1], "icon": "database", "shape": "cylinder"},
+    {"id": "indexer", "label": "INDEXER", "sub": "lambda on stream", "at": [4, 0], "layer": 0, "size": [2.6, 1], "icon": "bolt"},
+    {"id": "search", "label": "OPENSEARCH", "sub": "fast lookups", "kind": "quiet", "at": [0, 0], "layer": 0, "size": [2.6, 1], "icon": "search"}
   ],
   "groups": [
-    { "id": "write", "label": "WRITE PATH", "contains": ["api", "fn", "dlq"] },
-    { "id": "read", "label": "DATA AND SEARCH", "contains": ["table", "indexer", "search"] }
+    {"id": "write", "label": "WRITE PATH", "contains": ["api", "fn", "dlq"]},
+    {"id": "read", "label": "DATA AND SEARCH", "contains": ["table", "indexer", "search"]}
   ],
   "edges": [
-    { "from": "client", "to": "api", "label": "POST" },
-    { "from": "api", "to": "fn", "kind": "pass", "label": "valid" },
-    { "from": "fn", "to": "dlq", "kind": "fail", "label": "3 errors" },
-    { "from": "fn", "to": "table", "label": "write" },
-    { "from": "table", "to": "indexer", "label": "stream" },
-    { "from": "indexer", "to": "search", "label": "index" }
+    {"from": "client", "to": "api", "label": "POST"},
+    {"from": "api", "to": "fn", "kind": "pass", "label": "valid"},
+    {"from": "fn", "to": "dlq", "kind": "fail", "label": "3 errors"},
+    {"from": "fn", "to": "table", "label": "write"},
+    {"from": "table", "to": "indexer", "label": "stream"},
+    {"from": "indexer", "to": "search", "label": "index"}
+  ],
+  "callouts": [
+    {"id": "replay", "text": "Nothing is lost: a person can fix the cause and replay the queue.", "on": "dlq", "side": "down", "gap": 56}
   ],
   "steps": [
-    { "caption": "A client sends a change. API Gateway validates it first.", "show": ["client", "api"], "pulse": ["client>api"] },
-    { "caption": "A Lambda function applies the change.", "show": ["fn"], "focus": ["api", "fn"], "pulse": ["api>fn"] },
-    { "caption": "An event that fails three times is parked in a queue for replay.", "show": ["dlq"], "focus": ["fn", "dlq"], "pulse": ["fn>dlq"] },
-    { "caption": "A good change is written to DynamoDB, the source of truth.", "show": ["table"], "focus": ["fn", "table"], "pulse": ["fn>table"] },
-    { "caption": "The table's stream feeds an indexer, which keeps search up to date.", "show": ["indexer", "search"], "focus": ["read"], "pulse": ["table>indexer", "indexer>search"] },
-    { "caption": "Writes go one way; search catches up a moment later." }
+    {"caption": "A client sends a change. API Gateway validates it first.", "show": ["client", "api"], "pulse": ["client>api"]},
+    {"caption": "A Lambda function applies the change.", "show": ["fn"], "focus": ["api", "fn"], "pulse": ["api>fn"]},
+    {"caption": "An event that fails three times is parked in a queue for replay.", "show": ["dlq"], "focus": ["fn", "dlq"], "pulse": ["fn>dlq"], "callout": ["replay"]},
+    {"caption": "A good change is written to DynamoDB, the source of truth.", "show": ["table"], "focus": ["fn", "table"], "pulse": ["fn>table"]},
+    {"caption": "The table's stream feeds an indexer, which keeps search up to date.", "show": ["indexer", "search"], "focus": ["read"], "pulse": ["table>indexer", "indexer>search"]},
+    {"caption": "Writes go one way; search catches up a moment later."}
   ]
 }

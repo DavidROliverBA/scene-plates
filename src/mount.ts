@@ -4,56 +4,119 @@
 
 import type { Spec, View } from './spec';
 import { tokens as T, type ThemeName } from './tokens';
-import { compile } from './scene';
-import { renderFrame } from './render';
+import { compile, type Scene } from './scene';
+import { renderFrame, renderMorph } from './render';
 import { validate } from './validate';
+import { registerIcons, type IconPack } from './icons';
 
-export interface MountOpts { theme?: ThemeName | 'auto'; bare?: boolean; keys?: boolean; view?: View }
+export interface MountOpts {
+  theme?: ThemeName | 'auto';
+  bare?: boolean;
+  keys?: boolean;
+  view?: View;
+  title?: boolean; // false leaves the title out, for slides with their own heading
+  toggle?: boolean; // show a button that switches between 3D and flat
+}
 export interface Controller {
   readonly step: number;
   readonly stepCount: number;
+  readonly view: View;
   next(): boolean; // false when already on the last step, so a deck can move on
   prev(): boolean;
   go(i: number): boolean;
   restart(atEnd?: boolean): void; // replay the entrance; atEnd jumps to the last step
+  setView(v: View): boolean; // false when the scene cannot be drawn that way
+  toggleView(): boolean;
   destroy(): void;
 }
 
+const other = (v: View): View => (v === 'flat' ? 'iso' : 'flat');
+
 export function mount(el: HTMLElement, spec: Spec, opts: MountOpts = {}): Controller {
-  const errs = validate(spec, opts.view);
+  const showTitle = opts.title !== false;
+  let view: View = opts.view ?? spec.view ?? 'iso';
+  const errs = validate(spec, view);
   if (errs.length) {
     const pre = document.createElement('pre');
     pre.style.cssText = 'white-space:pre-wrap;font:13px ui-monospace,Menlo,monospace;color:#D6002A;border:1px dashed #D6002A;padding:12px;margin:0';
     pre.textContent = `This scene has ${errs.length} problem${errs.length > 1 ? 's' : ''}:\n` + errs.map((m) => '- ' + m).join('\n');
     el.replaceChildren(pre);
-    return { step: 0, stepCount: 0, next: () => false, prev: () => false, go: () => false, restart() {}, destroy() {} };
+    return { step: 0, stepCount: 0, view, next: () => false, prev: () => false, go: () => false, restart() {}, setView: () => false, toggleView: () => false, destroy() {} };
   }
-  const scene = compile(spec, opts.view), last = scene.states.length - 1;
+  // One compiled scene per view; the other view is built the first time it is asked for.
+  const scenes: Partial<Record<View, Scene | null>> = { [view]: compile(spec, view, showTitle) };
+  const sceneFor = (v: View): Scene | null => {
+    if (scenes[v] === undefined) scenes[v] = validate(spec, v).length ? null : compile(spec, v, showTitle);
+    return scenes[v] ?? null;
+  };
+  const scene = () => scenes[view]!;
+  const last = scene().states.length - 1;
   const still = matchMedia('(prefers-reduced-motion: reduce)'), dark = matchMedia('(prefers-color-scheme: dark)');
   let step = 0, from = -1, t0 = performance.now(), raf = 0, onScreen = true, entered = false;
+  let morph: { from: View; t0: number } | null = null;
+
+  const stage = document.createElement('div');
+  el.replaceChildren(stage);
+  let button: HTMLButtonElement | null = null;
 
   const theme = (): ThemeName => {
     if (opts.theme && opts.theme !== 'auto') return opts.theme;
     const set = el.closest<HTMLElement>('[data-theme]')?.dataset.theme;
     return set === 'dark' || set === 'light' ? set : dark.matches ? 'dark' : 'light';
   };
+  const dress = () => {
+    if (!button) return;
+    const th = T.themes[theme()];
+    button.textContent = view === 'flat' ? '3D view' : 'Flat view';
+    button.style.cssText = `position:absolute;top:2.2%;right:1.6%;font:500 12px ${T.font.caption};padding:5px 11px;border-radius:999px;cursor:pointer;background:${th.surface};color:${th.muted};border:1px solid ${th.plateStroke}`;
+  };
   const draw = (now: number) => {
-    const reduced = still.matches;
+    const reduced = still.matches, base = { step, theme: theme(), reducedMotion: reduced, bare: opts.bare, time: now };
+    if (morph) {
+      const m = reduced ? 1 : Math.min(1, (now - morph.t0) / T.motion.morph);
+      stage.innerHTML = renderMorph(scenes[morph.from]!, scene(), m, base);
+      if (m >= 1) morph = null;
+      raf = requestAnimationFrame(draw);
+      return;
+    }
     const progress = reduced ? 1 : Math.min(1, (now - t0) / T.motion.step);
-    el.innerHTML = renderFrame(scene, { step, from, progress, time: now, theme: theme(), reducedMotion: reduced, bare: opts.bare });
-    const moving = progress < 1 || (!reduced && onScreen && scene.states[step].pulse.size > 0);
+    stage.innerHTML = renderFrame(scene(), { ...base, from, progress });
+    const moving = progress < 1 || (!reduced && onScreen && scene().states[step].pulse.size > 0);
     raf = moving ? requestAnimationFrame(draw) : 0;
   };
   const kick = () => { if (!raf) raf = requestAnimationFrame(draw); };
   const go = (i: number) => {
     i = Math.max(0, Math.min(last, i));
     if (i === step) return false;
+    morph = null;
     from = step; step = i; t0 = performance.now();
     kick();
     el.dispatchEvent(new CustomEvent('sceneplate:step', { bubbles: true, detail: { step, stepCount: last + 1 } }));
     return true;
   };
-  const restart = (atEnd = false) => { step = atEnd ? last : 0; from = atEnd ? last : -1; t0 = performance.now(); kick(); };
+  const restart = (atEnd = false) => { morph = null; step = atEnd ? last : 0; from = atEnd ? last : -1; t0 = performance.now(); kick(); };
+  const setView = (v: View) => {
+    if (v === view) return true;
+    if (!sceneFor(v)) return false;
+    morph = { from: view, t0: performance.now() };
+    view = v; from = step; t0 = 0; // the step itself is already settled
+    dress();
+    kick();
+    el.dispatchEvent(new CustomEvent('sceneplate:view', { bubbles: true, detail: { view } }));
+    return true;
+  };
+
+  if (opts.toggle && sceneFor(other(view))) {
+    if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
+    button = document.createElement('button');
+    button.type = 'button';
+    button.title = 'Switch between the 3D and flat drawing (F)';
+    button.addEventListener('click', (e) => { e.stopPropagation(); setView(other(view)); });
+    // Space and Enter press the button; they must not also advance the scene. Arrows pass through.
+    button.addEventListener('keydown', (e) => { if (e.key === ' ' || e.key === 'Enter') e.stopPropagation(); });
+    el.append(button);
+    dress();
+  }
 
   // Play the entrance when the scene first comes into view, and stop the pulse
   // loop while it is off screen.
@@ -64,25 +127,33 @@ export function mount(el: HTMLElement, spec: Spec, opts: MountOpts = {}): Contro
   io.observe(el);
 
   const onKey = (e: KeyboardEvent) => {
+    if (e.key === 'f' || e.key === 'F') { if (setView(other(view))) { e.preventDefault(); e.stopPropagation(); } return; }
     const fwd = e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown', back = e.key === 'ArrowLeft' || e.key === 'PageUp';
     if ((fwd && go(step + 1)) || (back && go(step - 1))) { e.preventDefault(); e.stopPropagation(); }
   };
   const onClick = (e: MouseEvent) => { if (go(step + 1)) e.stopPropagation(); };
+  const repaint = () => { dress(); kick(); };
   if (opts.keys !== false) { el.addEventListener('keydown', onKey); el.addEventListener('click', onClick); }
-  dark.addEventListener('change', kick);
+  dark.addEventListener('change', repaint);
   still.addEventListener('change', kick);
   draw(t0);
 
   return {
     get step() { return step; },
     get stepCount() { return last + 1; },
-    next: () => go(step + 1), prev: () => go(step - 1), go, restart,
-    destroy() { cancelAnimationFrame(raf); io.disconnect(); el.removeEventListener('keydown', onKey); el.removeEventListener('click', onClick); dark.removeEventListener('change', kick); still.removeEventListener('change', kick); },
+    get view() { return view; },
+    next: () => go(step + 1), prev: () => go(step - 1), go, restart, setView,
+    toggleView: () => setView(other(view)),
+    destroy() { cancelAnimationFrame(raf); io.disconnect(); el.removeEventListener('keydown', onKey); el.removeEventListener('click', onClick); dark.removeEventListener('change', repaint); still.removeEventListener('change', kick); },
   };
 }
 
+// A page can hand over icon packs before this script loads.
+registerIcons((globalThis as any).ScenePlateIcons ?? {});
+
 // <scene-plate src="flow.json"></scene-plate>, or with the JSON inline in a
-// <script type="application/json"> child.
+// <script type="application/json"> child. Attributes: view, theme, bare,
+// toggle, notitle, icons (the address of an icon pack).
 if (typeof customElements !== 'undefined' && !customElements.get('scene-plate')) {
   class ScenePlate extends HTMLElement {
     ctl?: Controller;
@@ -90,24 +161,31 @@ if (typeof customElements !== 'undefined' && !customElements.get('scene-plate'))
       if (this.ctl) return;
       let spec: Spec;
       try {
-        const src = this.getAttribute('src');
+        const src = this.getAttribute('src'), icons = this.getAttribute('icons');
+        if (icons) registerIcons((await (await fetch(icons)).json()) as IconPack);
         spec = src ? await (await fetch(src)).json() : JSON.parse(this.querySelector('script[type="application/json"]')!.textContent!);
       } catch (e) {
         this.textContent = `scene-plate: could not read the spec (${(e as Error).message})`;
         return;
       }
       if (!this.hasAttribute('tabindex')) this.tabIndex = 0;
-      this.ctl = mount(this, spec, { theme: (this.getAttribute('theme') as ThemeName) ?? 'auto', bare: this.hasAttribute('bare'), view: (this.getAttribute('view') as View) ?? undefined });
+      this.ctl = mount(this, spec, {
+        theme: (this.getAttribute('theme') as ThemeName) ?? 'auto', bare: this.hasAttribute('bare'),
+        view: (this.getAttribute('view') as View) ?? undefined, toggle: this.hasAttribute('toggle'), title: !this.hasAttribute('notitle'),
+      });
     }
     disconnectedCallback() { this.ctl?.destroy(); this.ctl = undefined; }
     get step() { return this.ctl?.step ?? 0; }
     get stepCount() { return this.ctl?.stepCount ?? 0; }
+    get view() { return this.ctl?.view ?? 'iso'; }
     next() { return this.ctl?.next() ?? false; }
     prev() { return this.ctl?.prev() ?? false; }
     go(i: number) { return this.ctl?.go(i) ?? false; }
     restart(atEnd?: boolean) { this.ctl?.restart(atEnd); }
+    setView(v: View) { return this.ctl?.setView(v) ?? false; }
+    toggleView() { return this.ctl?.toggleView() ?? false; }
   }
   customElements.define('scene-plate', ScenePlate);
 }
 
-(globalThis as any).ScenePlates = { mount, validate, compile, renderFrame, tokens: T };
+(globalThis as any).ScenePlates = { mount, validate, compile, renderFrame, renderMorph, registerIcons, tokens: T };

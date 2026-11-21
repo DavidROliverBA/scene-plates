@@ -1,0 +1,33 @@
+{
+  "title": "A serverless web app",
+  "subtitle": "The same scene with official AWS icons from an imported pack",
+  "description": "People reach a serverless web app through CloudFront. Static pages come from S3; API calls go through API Gateway to a Lambda function that stores data in DynamoDB.",
+  "nodes": [
+    {"id": "users", "label": "PEOPLE", "sub": "browser or phone", "kind": "quiet", "at": [0, 0], "size": [2.6, 1], "icon": "user"},
+    {"id": "cdn", "label": "CLOUDFRONT", "sub": "one front door", "at": [4.2, 0], "size": [2.6, 1], "icon": "aws:cloudfront"},
+    {"id": "site", "label": "S3", "sub": "the static pages", "kind": "quiet", "at": [8.2, -2.2], "size": [2.6, 1], "icon": "aws:s3"},
+    {"id": "api", "label": "API GATEWAY", "sub": "checks each call", "kind": "gate", "at": [8.2, 0], "size": [2.6, 1], "icon": "aws:api-gateway"},
+    {"id": "fn", "label": "LAMBDA", "sub": "runs the logic", "at": [12.2, 0], "size": [2.6, 1], "icon": "aws:lambda"},
+    {"id": "table", "label": "DYNAMODB", "sub": "keeps the data", "kind": "success", "at": [12.2, 2.2], "size": [2.6, 1], "icon": "aws:dynamodb", "shape": "cylinder"}
+  ],
+  "groups": [
+    {"id": "aws", "label": "AWS  eu-west-2", "contains": ["cdn", "site", "api", "fn", "table"]}
+  ],
+  "edges": [
+    {"from": "users", "to": "cdn", "label": "https"},
+    {"from": "cdn", "to": "site", "via": "yx", "label": "pages"},
+    {"from": "cdn", "to": "api", "label": "/api"},
+    {"from": "api", "to": "fn", "kind": "pass"},
+    {"from": "fn", "to": "table", "label": "read, write"}
+  ],
+  "callouts": [
+    {"id": "door", "text": "One address for pages and API, so no cross-site rules to manage.", "on": "cdn", "side": "down", "gap": 70}
+  ],
+  "steps": [
+    {"caption": "Everything people do goes through one front door, CloudFront.", "show": ["users", "cdn"], "pulse": ["users>cdn"]},
+    {"caption": "Pages, scripts and images are plain files served from S3.", "show": ["site"], "focus": ["cdn", "site"], "pulse": ["cdn>site"]},
+    {"caption": "Calls to /api go to API Gateway, which checks each one.", "show": ["api"], "focus": ["cdn", "api"], "pulse": ["cdn>api"], "callout": ["door"]},
+    {"caption": "A Lambda function runs the logic and keeps data in DynamoDB.", "show": ["fn", "table"], "focus": ["api", "fn", "table"], "pulse": ["api>fn", "fn>table"]},
+    {"caption": "No servers to run: every part scales on its own and bills per use."}
+  ]
+}

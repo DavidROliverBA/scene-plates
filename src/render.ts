@@ -2,8 +2,9 @@
 // same string, in a browser or on the command line.
 
 import { tokens as T, type ThemeName } from './tokens';
-import type { Box, LEdge, LGroup, LNode, Vec3 } from './layout';
-import { alphas, targetPoint, view, type Scene, type StepState } from './scene';
+import { textArea, type Box, type LCallout, type LEdge, type LGroup, type LNode, type Vec3 } from './layout';
+import { alphas, calloutBox, targetPoint, view, type Scene, type StepState } from './scene';
+import { iconImage, iconPath } from './icons';
 
 export interface FrameOpts {
   step?: number; // which step to show
@@ -13,6 +14,7 @@ export interface FrameOpts {
   theme?: ThemeName;
   reducedMotion?: boolean;
   bare?: boolean; // no background, for slides that supply their own
+  edgeAlpha?: number; // fades all lines and callouts, used while switching view
 }
 
 const f = (n: number) => String(Math.round(n * 10) / 10);
@@ -20,6 +22,9 @@ const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+const lerpBox = (a: Box, b: Box, t: number): Box => ({
+  x0: lerp(a.x0, b.x0, t), x1: lerp(a.x1, b.x1, t), y0: lerp(a.y0, b.y0, t), y1: lerp(a.y1, b.y1, t), z0: lerp(a.z0, b.z0, t), z1: lerp(a.z1, b.z1, t),
+});
 
 export function mix(a: string, b: string, t: number): string {
   const h = (s: string) => [1, 3, 5].map((i) => parseInt(s.slice(i, i + 2), 16));
@@ -35,6 +40,7 @@ export function renderFrame(scene: Scene, o: FrameOpts = {}): string {
   const cur = states[step];
   const prev: StepState | null = from >= 0 && from < states.length ? states[from] : null;
   const e = o.reducedMotion ? 1 : ease(clamp(o.progress ?? 1, 0, 1));
+  const lineAlpha = o.edgeAlpha ?? 1;
 
   // Camera: blend angle, zoom, the point we look at and where it sits on screen.
   const c0 = (prev ?? cur).cam, c1 = cur.cam;
@@ -53,14 +59,15 @@ export function renderFrame(scene: Scene, o: FrameOpts = {}): string {
     return [AS[0] + S * (q[0] - pa[0]), AS[1] + S * (q[1] - pa[1])];
   };
   const poly = (pts: Vec3[]) => pts.map((p) => P(p).map(f).join(',')).join(' ');
+  const pts2 = (pts: [number, number][]) => pts.map((p) => p.map(f).join(',')).join(' ');
 
-  // Text lying flat on a horizontal face: local 100 units = 1 world unit.
-  const k = S / 100;
-  const flat = (at: Vec3, text: string, size: number, fill: string, anchor: string, extra = '') => {
-    const [x, y] = P(at);
-    const m = [v.ux[0] * k, v.ux[1] * k, v.uy[0] * k, v.uy[1] * k, x, y].map((n) => n.toFixed(4)).join(' ');
-    return `<text transform="matrix(${m})" font-size="${f(size * 100)}" text-anchor="${anchor}" fill="${fill}"${extra}>${esc(text)}</text>`;
+  // Things lying flat on a horizontal face. "scale" is local units per world unit.
+  const faceMatrix = (at: Vec3, scale: number) => {
+    const [x, y] = P(at), k = S / scale;
+    return [v.ux[0] * k, v.ux[1] * k, v.uy[0] * k, v.uy[1] * k, x, y].map((n) => n.toFixed(4)).join(' ');
   };
+  const flat = (at: Vec3, text: string, size: number, fill: string, anchor: string, extra = '') =>
+    `<text transform="matrix(${faceMatrix(at, 100)})" font-size="${f(size * 100)}" text-anchor="${anchor}" fill="${fill}"${extra}>${esc(text)}</text>`;
 
   const a0 = alphas(scene, prev), a1 = alphas(scene, cur);
   const out: string[] = [];
@@ -74,6 +81,26 @@ export function renderFrame(scene: Scene, o: FrameOpts = {}): string {
     s += `<polygon points="${poly([[b.x0, b.y1, b.z1], [b.x1, b.y1, b.z1], [b.x1, b.y1, b.z0], [b.x0, b.y1, b.z0]])}" fill="${front}"/>`;
     s += `<polygon points="${poly([[b.x0, b.y0, b.z1], [b.x1, b.y0, b.z1], [b.x1, b.y1, b.z1], [b.x0, b.y1, b.z1]])}" fill="${top}"${topOpacity < 1 ? ` fill-opacity="${topOpacity}"` : ''} stroke="${stroke}"${sw ? ` stroke-width="${sw}"` : ''}/>`;
     return s;
+  };
+
+  // A cylinder: the footprint's ellipse pushed up through the node's height.
+  const cylinder = (b: Box, top: string, wall: string, band: string, stroke: string, sw: number) => {
+    const N = 44, cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2, rx = (b.x1 - b.x0) / 2, ry = (b.y1 - b.y0) / 2;
+    const ring = (z: number) => Array.from({ length: N }, (_, i) => { const t = (i / N) * Math.PI * 2; return P([cx + rx * Math.cos(t), cy + ry * Math.sin(t), z]); });
+    const up = ring(b.z1), down = ring(b.z0);
+    let iL = 0, iR = 0;
+    up.forEach((p, i) => { if (p[0] < up[iL][0]) iL = i; if (p[0] > up[iR][0]) iR = i; });
+    let s = `<polygon points="${pts2(down)}" fill="${wall}"/><polygon points="${pts2([up[iL], up[iR], down[iR], down[iL]])}" fill="${wall}"/>`;
+    if (Math.abs(down[0][1] - up[0][1]) > 5) {
+      // One ring round the visible half of the wall, the usual sign for a data store.
+      const mid = ring(b.z0 + (b.z1 - b.z0) * 0.5), arc: [number, number][] = [];
+      for (let i = iL; ; i = (i + 1) % N) { arc.push(mid[i]); if (i === iR) break; }
+      const other: [number, number][] = [];
+      for (let i = iR; ; i = (i + 1) % N) { other.push(mid[i]); if (i === iL) break; }
+      const lower = (q: [number, number][]) => q.reduce((m, p) => Math.max(m, p[1]), -Infinity);
+      s += `<polyline points="${pts2(lower(arc) >= lower(other) ? arc : other)}" fill="none" stroke="${band}" stroke-width="1.4"/>`;
+    }
+    return s + `<polygon points="${pts2(up)}" fill="${top}" stroke="${stroke}"${sw ? ` stroke-width="${sw}"` : ''}/>`;
   };
 
   const drawGroup = (g: LGroup) => {
@@ -91,14 +118,23 @@ export function renderFrame(scene: Scene, o: FrameOpts = {}): string {
     if (a < 0.01) return;
     const dz = p === 0 ? (1 - e) * T.motion.drop : q === 0 ? e * T.motion.drop * 0.5 : 0; // drops in, lifts out
     const b = { ...n.box, z0: n.box.z0 + dz, z1: n.box.z1 + dz };
-    const col = th.kind[n.kind];
-    let s = open(a) + faces(b, mix(th.surface, col, th.tint), col, mix(col, th.shade, 0.3), col, 1, model.flat ? T.stroke.flatNode : 0);
-    const cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2, L = T.text.label;
+    const col = th.kind[n.kind], tint = mix(th.surface, col, th.tint), sw = model.flat ? T.stroke.flatNode : 0;
+    let s = open(a) + (n.spec.shape === 'cylinder'
+      ? cylinder(b, tint, col, mix(col, th.surface, 0.45), col, sw)
+      : faces(b, tint, col, mix(col, th.shade, 0.3), col, 1, sw));
+    const area = textArea({ ...n, box: b }), cy = (b.y0 + b.y1) / 2, L = T.text.label;
+    if (area.iconAt && n.spec.icon) {
+      const at: Vec3 = [area.iconAt[0], area.iconAt[1], b.z1], I = T.icon;
+      const d = iconPath(n.spec.icon), img = iconImage(n.spec.icon);
+      // Local units: a 24-wide box for built-in glyphs, 64 for a pack image.
+      if (d) s += `<path d="${d}" transform="matrix(${faceMatrix(at, 24 / I.size)})" fill="none" stroke="${col}" stroke-width="${I.stroke}" stroke-linecap="round"/>`;
+      else if (img) s += `<image href="${img}" width="64" height="64" transform="matrix(${faceMatrix(at, 64 / I.size)})"/>`;
+    }
     if (n.spec.sub) {
-      s += flat([cx, cy - 0.03, b.z1], n.spec.label, L, col, 'middle', ' font-weight="700"');
-      s += flat([cx, cy + 0.2, b.z1], n.spec.sub, T.text.sub, th.muted, 'middle');
+      s += flat([area.cx, cy - 0.03, b.z1], n.spec.label, L, col, 'middle', ' font-weight="700"');
+      s += flat([area.cx, cy + 0.2, b.z1], n.spec.sub, T.text.sub, th.muted, 'middle');
     } else {
-      s += flat([cx, cy + L * 0.35, b.z1], n.spec.label, L, col, 'middle', ' font-weight="700"');
+      s += flat([area.cx, cy + L * 0.35, b.z1], n.spec.label, L, col, 'middle', ' font-weight="700"');
     }
     out.push(s + '</g>');
   };
@@ -118,7 +154,7 @@ export function renderFrame(scene: Scene, o: FrameOpts = {}): string {
 
   const drawEdge = (ed: LEdge) => {
     const [p, q] = [a0.edge(ed.id), a1.edge(ed.id)];
-    const a = lerp(p, q, e);
+    const a = lerp(p, q, e) * lineAlpha;
     if (a < 0.01) return;
     const col = th.kind[ed.kind === 'flow' ? 'process' : ed.kind === 'pass' ? 'success' : ed.kind];
     const pulsing = cur.pulse.has(ed.id) && q > 0;
@@ -149,8 +185,8 @@ export function renderFrame(scene: Scene, o: FrameOpts = {}): string {
       draw = ` stroke-dasharray="${f(total * e)} ${f(total + 1)}"`;
       head = `<g opacity="${(e * e).toFixed(2)}">${head}</g>`;
     }
-    let s = open(p === 0 && draw ? q : a);
-    s += `<polyline points="${scr.map((pt) => pt.map(f).join(',')).join(' ')}" fill="none" stroke="${col}" stroke-width="${f(width)}" stroke-linejoin="round" stroke-linecap="round"${dash ? ` stroke-dasharray="${dash}"` : draw}/>${head}`;
+    let s = open(p === 0 && draw ? q * lineAlpha : a);
+    s += `<polyline points="${pts2(scr)}" fill="none" stroke="${col}" stroke-width="${f(width)}" stroke-linejoin="round" stroke-linecap="round"${dash ? ` stroke-dasharray="${dash}"` : draw}/>${head}`;
     if (ed.label && ed.spec.label) {
       const lc = ed.kind === 'flow' ? th.muted : col;
       if (ed.riser) {
@@ -168,6 +204,22 @@ export function renderFrame(scene: Scene, o: FrameOpts = {}): string {
     out.push(s + '</g>');
   };
 
+  const drawCallout = (c: LCallout) => {
+    const on = (s: StepState | null) => (s && s.callout.has(c.id) ? 1 : 0);
+    const [p, q] = [on(prev), on(cur)];
+    const a = lerp(p, q, e) * lineAlpha;
+    if (a < 0.01) return;
+    const K = T.callout, at = P(c.anchor), box = calloutBox(c, at), col = th.kind.loop;
+    const slide = p === 0 ? (1 - e) * 10 : 0; // settles into place
+    let s = `<g opacity="${a.toFixed(2)}" transform="translate(0 ${f(c.side === 'down' ? slide : -slide)})">`;
+    s += `<line x1="${f(at[0])}" y1="${f(at[1])}" x2="${f(box.end[0])}" y2="${f(box.end[1])}" stroke="${col}" stroke-width="1.6"/><circle cx="${f(at[0])}" cy="${f(at[1])}" r="4" fill="${col}"/>`;
+    s += `<rect x="${f(box.x)}" y="${f(box.y)}" width="${f(box.w)}" height="${f(box.h)}" rx="6" fill="${mix(th.surface, col, 0.14)}" stroke="${col}" stroke-width="1.4"/>`;
+    box.lines.forEach((line, i) => {
+      s += `<text x="${f(box.x + K.padX)}" y="${f(box.y + K.padY + K.lineHeight * (i + 0.74))}" font-family="${T.font.caption}" font-size="${K.size}" fill="${th.ink}">${esc(line)}</text>`;
+    });
+    out.push(s + '</g>');
+  };
+
   // Painter's order: lowest layer first; within a layer plates, floor lines,
   // lines coming up from below, then nodes from far to near.
   const far = (b: Box) => v.far([(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, b.z0]);
@@ -177,9 +229,14 @@ export function renderFrame(scene: Scene, o: FrameOpts = {}): string {
     model.edges.filter((x) => x.plane === plane && x.riser).forEach(drawEdge);
     model.nodes.filter((n) => n.plane === plane).sort((x, y) => far(y.box) - far(x.box)).forEach(drawNode);
   }
+  model.callouts.forEach(drawCallout);
 
   const F = T.frame;
   let hud = '';
+  if (scene.showTitle && scene.spec.title) {
+    hud += `<text x="${F.marginX}" y="${T.title.y}" font-family="${T.font.caption}" font-size="${T.title.size}" font-weight="650" fill="${th.ink}">${esc(scene.spec.title)}</text>`;
+    if (scene.spec.subtitle) hud += `<text x="${F.marginX}" y="${T.title.subY}" font-family="${T.font.caption}" font-size="${T.title.subSize}" fill="${th.muted}">${esc(scene.spec.subtitle)}</text>`;
+  }
   if (cur.caption) {
     const a = prev && prev.caption === cur.caption ? 1 : e;
     hud += `<text x="${F.w / 2}" y="${F.h - 58}" text-anchor="middle" font-family="${T.font.caption}" font-size="${T.caption.size}" fill="${th.ink}" opacity="${a.toFixed(2)}">${esc(cur.caption)}</text>`;
@@ -195,4 +252,31 @@ export function renderFrame(scene: Scene, o: FrameOpts = {}): string {
     (o.bare ? '' : `<rect width="${F.w}" height="${F.h}" fill="${th.bg}"/>`) +
     out.join('') + hud + '</svg>'
   );
+}
+
+// Switching between the 3D and flat drawings of one spec: lines fade out, the
+// boxes and the camera move across, then the other drawing's lines fade in.
+export function renderMorph(a: Scene, b: Scene, t: number, o: FrameOpts = {}): string {
+  const settled = { ...o, progress: 1, from: undefined };
+  if (o.reducedMotion) return renderFrame(t < 0.5 ? a : b, settled);
+  if (t <= 0.22) return renderFrame(a, { ...settled, edgeAlpha: 1 - t / 0.22 });
+  if (t >= 0.78) return renderFrame(b, { ...settled, edgeAlpha: clamp((t - 0.78) / 0.22, 0, 1) });
+  const m = ease((t - 0.22) / 0.56), ref = a.model.flat ? b : a; // draw order comes from the 3D model
+  const v3 = (p: Vec3, q: Vec3): Vec3 => [lerp(p[0], q[0], m), lerp(p[1], q[1], m), lerp(p[2], q[2], m)];
+  const v2 = (p: [number, number], q: [number, number]): [number, number] => [lerp(p[0], q[0], m), lerp(p[1], q[1], m)];
+  const between: Scene = {
+    ...a,
+    model: {
+      ...ref.model, flat: false, edges: [], callouts: [],
+      nodes: ref.model.nodes.map((n) => ({ ...n, box: lerpBox(a.model.byId.get(n.id)!.box, b.model.byId.get(n.id)!.box, m) })),
+      groups: ref.model.groups.map((g) => ({ ...g, box: lerpBox(a.model.groups.find((x) => x.id === g.id)!.box, b.model.groups.find((x) => x.id === g.id)!.box, m) })),
+    },
+    states: a.states.map((s, i) => ({ ...s, cam: { ...s.cam, yaw: lerp(s.cam.yaw, b.states[i].cam.yaw, m), pitch: lerp(s.cam.pitch, b.states[i].cam.pitch, m) } })),
+    fit: {
+      scale: lerp(a.fit.scale, b.fit.scale, m), anchor: v3(a.fit.anchor, b.fit.anchor),
+      anchorScreen: v2(a.fit.anchorScreen, b.fit.anchorScreen), centre: v2(a.fit.centre, b.fit.centre),
+    },
+  };
+  between.model.byId = new Map(between.model.nodes.map((n) => [n.id, n]));
+  return renderFrame(between, settled);
 }

@@ -2,18 +2,19 @@
 
 import { tokens as T } from './tokens';
 import type { Spec, View } from './spec';
-import { buildModel, type Box, type Model, type Vec3 } from './layout';
+import { buildModel, type Box, type LCallout, type Model, type Vec3 } from './layout';
 
 export interface Cam { yaw: number; pitch: number; zoom: number; target: string[] | null }
 export interface StepState {
   visible: Set<string>; // node ids, plus held edges that have been shown
   focus: Set<string> | null;
   pulse: Set<string>;
+  callout: Set<string>;
   cam: Cam;
   caption: string;
 }
 export interface Scene {
-  spec: Spec; model: Model; states: StepState[];
+  spec: Spec; model: Model; states: StepState[]; showTitle: boolean;
   fit: { scale: number; anchor: Vec3; anchorScreen: [number, number]; centre: [number, number] };
 }
 
@@ -64,7 +65,7 @@ export function buildStates(spec: Spec, model: Model): StepState[] {
   if (!steps.length) {
     return [{
       visible: new Set([...model.nodes.map((n) => n.id), ...model.edges.map((e) => e.id)]),
-      focus: null, pulse: new Set(), cam: baseCam(spec, model.flat), caption: '',
+      focus: null, pulse: new Set(), callout: new Set(model.callouts.map((c) => c.id)), cam: baseCam(spec, model.flat), caption: '',
     }];
   }
   const out: StepState[] = [];
@@ -82,19 +83,20 @@ export function buildStates(spec: Spec, model: Model): StepState[] {
     }
     out.push({
       visible: new Set(visible), focus: s.focus ? new Set(expand(s.focus)) : null,
-      pulse: new Set(s.pulse ?? []), cam, caption: s.caption ?? '',
+      pulse: new Set(s.pulse ?? []), callout: new Set(s.callout ?? []), cam, caption: s.caption ?? '',
     });
   }
   return out;
 }
 
-export function compile(spec: Spec, view?: View): Scene {
+export function compile(spec: Spec, view?: View, showTitle = true): Scene {
   const model = buildModel(spec, view);
   const states = buildStates(spec, model);
   // Fit the whole scene once, at the base camera. The scale never changes after
   // that except by an explicit zoom, so nothing "breathes" as the camera turns.
   const cam = baseCam(spec, model.flat), v = view_(cam.yaw, cam.pitch), F = T.frame;
-  const availW = F.w - 2 * F.marginX, availH = F.h - F.marginTop - F.captionBand;
+  const top = showTitle && spec.title ? (spec.subtitle ? T.title.bandSub : T.title.band) : F.marginTop;
+  const availW = F.w - 2 * F.marginX, availH = F.h - top - F.captionBand;
   const span = (c: { yaw: number; pitch: number }) => {
     const q = corners(model.bounds).map(view_(c.yaw, c.pitch).p), x = q.map((p) => p[0]), y = q.map((p) => p[1]);
     return [Math.max(Math.max(...x) - Math.min(...x), 0.001), Math.max(Math.max(...y) - Math.min(...y), 0.001)];
@@ -103,11 +105,11 @@ export function compile(spec: Spec, view?: View): Scene {
   const scale = Math.min(T.maxScale, ...[cam, ...states.map((s) => s.cam)].map((c) => { const [w, h] = span(c); return Math.min(availW / w, availH / h); }));
   const pts = corners(model.bounds).map(v.p);
   const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
-  const mid: [number, number] = [F.w / 2, F.marginTop + availH / 2];
+  const mid: [number, number] = [F.w / 2, top + availH / 2];
   const anchor = centre(model.bounds), pa = v.p(anchor);
   const c2: [number, number] = [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2];
   return {
-    spec, model, states,
+    spec, model, states, showTitle,
     fit: { scale, anchor, centre: mid, anchorScreen: [mid[0] - scale * (c2[0] - pa[0]), mid[1] - scale * (c2[1] - pa[1])] },
   };
 }
@@ -136,4 +138,31 @@ export function frameBox(scene: Scene, cam: Cam): [number, number, number, numbe
   const v = view_(cam.yaw, cam.pitch), pa = v.p(scene.fit.anchor), S = scene.fit.scale * cam.zoom;
   const q = corners(scene.model.bounds).map((c) => { const p = v.p(c); return [scene.fit.anchorScreen[0] + S * (p[0] - pa[0]), scene.fit.anchorScreen[1] + S * (p[1] - pa[1])]; });
   return [Math.min(...q.map((p) => p[0])), Math.min(...q.map((p) => p[1])), Math.max(...q.map((p) => p[0])), Math.max(...q.map((p) => p[1]))];
+}
+
+// World point to frame pixels for a settled camera.
+export function projector(scene: Scene, cam: Cam): (p: Vec3) => [number, number] {
+  const v = view_(cam.yaw, cam.pitch), t = cam.target ? targetPoint(scene.model, cam.target) : null;
+  const A = t ?? scene.fit.anchor, AS = t ? scene.fit.centre : scene.fit.anchorScreen, S = scene.fit.scale * cam.zoom, pa = v.p(A);
+  return (p) => { const q = v.p(p); return [AS[0] + S * (q[0] - pa[0]), AS[1] + S * (q[1] - pa[1])]; };
+}
+
+export function wrapText(text: string, max: number): string[] {
+  const lines: string[] = [];
+  let line = '';
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    if (line && (line + ' ' + word).length > max) { lines.push(line); line = word; } else line = line ? line + ' ' + word : word;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+// A callout's box in frame pixels, given where its anchor lands: the box, its lines, and where the joining line ends.
+export function calloutBox(c: LCallout, a: [number, number]) {
+  const K = T.callout, lines = wrapText(c.spec.text, K.wrap), gap = c.spec.gap ?? K.gap;
+  const w = Math.max(...lines.map((l) => l.length), 4) * K.charWidth + 2 * K.padX, h = lines.length * K.lineHeight + 2 * K.padY;
+  const x = c.side === 'left' ? a[0] - gap - w : c.side === 'right' ? a[0] + gap : a[0] - w / 2;
+  const y = c.side === 'up' ? a[1] - gap - h : c.side === 'down' ? a[1] + gap : a[1] - h / 2;
+  const end: [number, number] = c.side === 'up' ? [a[0], y + h] : c.side === 'down' ? [a[0], y] : c.side === 'left' ? [x + w, a[1]] : [x, a[1]];
+  return { x, y, w, h, lines, end };
 }

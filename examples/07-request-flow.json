@@ -1,31 +1,32 @@
 {
   "title": "A request through the gateway",
+  "subtitle": "Two layers and a fail path",
   "description": "A client request passes a gateway check, reaches a service, and the service reads from a cache and a database on the layer below. Requests that fail the check are rejected.",
   "nodes": [
-    { "id": "client", "label": "CLIENT", "sub": "web or phone", "at": [0, 0], "layer": 1 },
-    { "id": "gateway", "label": "GATEWAY", "sub": "checks the token", "kind": "gate", "at": [3.4, 0], "layer": 1 },
-    { "id": "service", "label": "SERVICE", "sub": "does the work", "at": [6.8, 0], "layer": 1 },
-    { "id": "reject", "label": "REJECTED", "sub": "401, nothing runs", "kind": "fail", "at": [3.4, -2], "layer": 1 },
-    { "id": "cache", "label": "CACHE", "sub": "recent answers", "kind": "quiet", "at": [3.4, 0], "layer": 0 },
-    { "id": "db", "label": "DATABASE", "sub": "source of truth", "kind": "success", "at": [6.8, 0], "layer": 0 }
+    {"id": "client", "label": "CLIENT", "sub": "web or phone", "at": [0, 0], "layer": 1},
+    {"id": "gateway", "label": "GATEWAY", "sub": "checks the token", "kind": "gate", "at": [3.4, 0], "layer": 1},
+    {"id": "service", "label": "SERVICE", "sub": "does the work", "at": [6.8, 0], "layer": 1},
+    {"id": "reject", "label": "REJECTED", "sub": "401, nothing runs", "kind": "fail", "at": [3.4, -2], "layer": 1},
+    {"id": "cache", "label": "CACHE", "sub": "recent answers", "kind": "quiet", "at": [3.4, 0], "layer": 0},
+    {"id": "db", "label": "DATABASE", "sub": "source of truth", "kind": "success", "at": [6.8, 0], "layer": 0}
   ],
   "groups": [
-    { "id": "app", "label": "APPLICATION", "contains": ["client", "gateway", "service", "reject"] },
-    { "id": "data", "label": "DATA", "contains": ["cache", "db"] }
+    {"id": "app", "label": "APPLICATION", "contains": ["client", "gateway", "service", "reject"]},
+    {"id": "data", "label": "DATA", "contains": ["cache", "db"]}
   ],
   "edges": [
-    { "from": "client", "to": "gateway", "label": "request" },
-    { "from": "gateway", "to": "service", "kind": "pass", "label": "valid" },
-    { "from": "gateway", "to": "reject", "kind": "fail", "label": "invalid" },
-    { "from": "service", "to": "db", "label": "read" },
-    { "from": "db", "to": "cache", "kind": "quiet", "label": "warms" }
+    {"from": "client", "to": "gateway", "label": "request"},
+    {"from": "gateway", "to": "service", "kind": "pass", "label": "valid"},
+    {"from": "gateway", "to": "reject", "kind": "fail", "label": "invalid"},
+    {"from": "service", "to": "db", "label": "read"},
+    {"from": "db", "to": "cache", "kind": "quiet", "label": "warms"}
   ],
   "steps": [
-    { "caption": "Every request starts at the client.", "show": ["client"] },
-    { "caption": "The gateway checks the token before anything else runs.", "show": ["gateway"], "pulse": ["client>gateway"] },
-    { "caption": "A bad token stops here. Nothing behind the gateway is touched.", "show": ["reject"], "focus": ["gateway", "reject"], "pulse": ["gateway>reject"] },
-    { "caption": "A good token goes through to the service.", "show": ["service"], "pulse": ["gateway>service"] },
-    { "caption": "The service reads from the data layer underneath.", "show": ["data"], "focus": ["service", "db"], "pulse": ["service>db"], "camera": { "yaw": 32, "pitch": 32 } },
-    { "caption": "The whole path: checked once, then served from data.", "camera": { "yaw": 22, "pitch": 38 } }
+    {"caption": "Every request starts at the client.", "show": ["client"]},
+    {"caption": "The gateway checks the token before anything else runs.", "show": ["gateway"], "pulse": ["client>gateway"]},
+    {"caption": "A bad token stops here. Nothing behind the gateway is touched.", "show": ["reject"], "focus": ["gateway", "reject"], "pulse": ["gateway>reject"]},
+    {"caption": "A good token goes through to the service.", "show": ["service"], "pulse": ["gateway>service"]},
+    {"caption": "The service reads from the data layer underneath.", "show": ["data"], "focus": ["service", "db"], "pulse": ["service>db"], "camera": {"yaw": 32, "pitch": 32}},
+    {"caption": "The whole path: checked once, then served from data.", "camera": {"yaw": 22, "pitch": 38}}
   ]
 }

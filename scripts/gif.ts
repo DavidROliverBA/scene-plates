@@ -10,11 +10,14 @@ import { compile } from '../src/scene';
 import { renderFrame } from '../src/render';
 import { validate } from '../src/validate';
 import { tokens as T, type ThemeName } from '../src/tokens';
+import { registerIcons } from '../src/icons';
 
 const args = process.argv.slice(2);
 const opt = (name: string, d: string) => { const i = args.indexOf(name); return i >= 0 ? args.splice(i, 2)[1] : d; };
 const theme = opt('--theme', 'light') as ThemeName, width = opt('--width', '960');
 const view = (opt('--view', '') || undefined) as 'iso' | 'flat' | undefined;
+const iconPack = opt('--icons', '');
+if (iconPack) registerIcons(await Bun.file(iconPack).json());
 const [specPath, outPath] = args;
 if (!specPath || !outPath) { console.error('Usage: bun scripts/gif.ts spec.json out.gif [--theme dark] [--width 960]'); process.exit(1); }
 

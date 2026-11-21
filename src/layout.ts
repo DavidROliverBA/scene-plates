@@ -2,7 +2,7 @@
 // Pure and deterministic; no camera here.
 
 import { tokens as T } from './tokens';
-import type { EdgeKind, EdgeSpec, GroupSpec, NodeKind, NodeSpec, Spec, View } from './spec';
+import type { CalloutSpec, EdgeKind, EdgeSpec, GroupSpec, NodeKind, NodeSpec, Spec, View } from './spec';
 
 export type Vec3 = [number, number, number];
 export interface Box { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number }
@@ -14,9 +14,19 @@ export interface LEdge {
   id: string; spec: EdgeSpec; kind: EdgeKind; riser: boolean; layer: number; plane: number;
   pts: Vec3[]; label?: EdgeLabel; problem?: string;
 }
+export interface LCallout { id: string; spec: CalloutSpec; anchor: Vec3; side: 'up' | 'down' | 'left' | 'right' }
 export interface Model {
+  callouts: LCallout[];
   nodes: LNode[]; byId: Map<string, LNode>; groups: LGroup[]; edges: LEdge[];
   bounds: Box; planes: number[]; flat: boolean;
+}
+
+// Where the words go on a node's top face, and how much room they have.
+export function textArea(n: LNode): { cx: number; room: number; iconAt: [number, number] | null } {
+  const b = n.box, round = n.spec.shape === 'cylinder' ? 0.08 : 0, I = T.icon;
+  if (!n.spec.icon) return { cx: (b.x0 + b.x1) / 2, room: (b.x1 - b.x0 - 0.24) * (round ? 0.9 : 1), iconAt: null };
+  const left = b.x0 + I.inset + round, from = left + I.size + I.gap, to = b.x1 - 0.12 - round;
+  return { cx: (from + to) / 2, room: to - from, iconAt: [left, (b.y0 + b.y1) / 2 - I.size / 2] };
 }
 
 export const edgeId = (e: EdgeSpec) => e.id ?? `${e.from}>${e.to}`;
@@ -204,5 +214,13 @@ export function buildModel(spec: Spec, view: View = spec.view ?? 'iso'): Model {
     z0: pick((b) => b.z0, Math.min), z1: pick((b) => b.z1, Math.max),
   };
   const planes = [...new Set(nodes.map((n) => n.plane))].sort((p, q) => p - q);
-  return { nodes, byId, groups, edges, bounds, planes, flat };
+  const callouts: LCallout[] = [];
+  for (const c of spec.callouts ?? []) {
+    const b = byId.get(c.on)?.box ?? groups.find((g) => g.id === c.on)?.box;
+    if (!b) continue;
+    const side = c.side ?? 'up', cx = mid(b.x0, b.x1), cy = mid(b.y0, b.y1);
+    const anchor: Vec3 = side === 'up' ? [cx, b.y0, b.z1] : side === 'down' ? [cx, b.y1, b.z0] : side === 'left' ? [b.x0, cy, b.z1] : [b.x1, cy, b.z1];
+    callouts.push({ id: c.id, spec: c, anchor, side });
+  }
+  return { nodes, byId, groups, edges, bounds, planes, flat, callouts };
 }

@@ -66,6 +66,16 @@ the bottom; higher layers float above.
 | `success` | green | approved, committed, source of truth |
 | `quiet` | grey | supporting parts: caches, logs, telemetry |
 
+**Icons and shapes.** `"icon"` puts a small icon on the node: `user`, `globe`,
+`server`, `database`, `storage`, `function`, `queue`, `gateway`, `shield`,
+`lock`, `cloud`, `bolt`, `search`, `gear`, `balance`, `document`, `mail`,
+`clock`, `check`, `stop`, `container`, `cart`, `card`, `code`. An icon takes
+room, so give those nodes `"size": [2.6, 1]` and space columns 4 apart (0, 4,
+8, 12). `"shape": "cylinder"` is for databases and stores. If an icon pack has
+been imported, its icons are named with a prefix: `"aws:lambda"`, `"aws:s3"`,
+`"aws:dynamodb"`. Only use `aws:` names when `icons/aws.json` exists in
+`$SCENE_PLATES_HOME`; otherwise use the built-in ones.
+
 **Edge kinds.** `flow` (default, navy), `pass` (green), `fail` (red, dashed),
 `loop` (amber; **must** have a label stating its cap, such as "max 3 tries"),
 `quiet` (grey, dotted). An edge's id is `"from>to"` unless you give it an `id`.
@@ -95,7 +105,7 @@ layers for edge, network and data, with **one row of nodes per layer** when
 there are three layers. Colour still follows the kinds above, not the vendor's
 icon colours.
 
-## Steps: the only six moves
+## Steps: the only seven moves
 
 | move | lasts | does |
 |---|---|---|
@@ -104,9 +114,24 @@ icon colours.
 | `focus` | this step | everything else dims |
 | `pulse` | this step | a dot travels along these edges |
 | `camera` | until changed | `yaw` (-45 to 45), `pitch` (25 to 70), `zoom`, `target` (ids to centre on, `null` to reset) |
+| `callout` | this step | shows these callout ids (see below) |
 | `caption` | this step | one sentence under the scene, 84 characters at most |
 
 With no `steps`, the whole scene shows at once.
+
+**Titles.** `title` (60 characters at most) and optional `subtitle` are drawn
+at the top left of the frame.
+
+**Callouts** explain what a label cannot. Define them once, show them per step:
+
+```json
+"callouts": [{ "id": "why", "text": "The limit is a rule, so no person is needed.", "on": "limit", "side": "up" }]
+```
+
+`on` is a node or group; `side` is `up` (default), `down`, `left` or `right`;
+`gap` is the distance in pixels (default 60). Keep text under 110 characters.
+One callout per step is plenty. If the checker says it covers a box or leaves
+the frame, change `side` or `gap`.
 
 ## Rules
 
@@ -133,9 +158,9 @@ With no `steps`, the whole scene shows at once.
 ```
 
 Or put the JSON inline in a `<script type="application/json">` child, which
-works from `file://` with no server. Attributes: `view="flat|iso"`, `theme="light|dark"` (default
+works from `file://` with no server. Attributes: `toggle` (a button and the F key to switch flat and 3D), `notitle`, `icons="pack.json"`, `view="flat|iso"`, `theme="light|dark"` (default
 follows the page's `data-theme`, then the system), `bare` (no background). The
-element has `next()`, `prev()`, `go(i)`, `restart()`, `step` and `stepCount`;
+element has `next()`, `prev()`, `go(i)`, `restart()`, `setView(v)`, `toggleView()`, `step` and `stepCount`;
 `next()` returns `false` on the last step so the deck can move to its next
 slide. Arrow keys and clicks work when the scene has focus. Reduced-motion
 settings are honoured, and printing gives the current still.

@@ -16,7 +16,11 @@ export interface Theme {
 }
 
 export const tokens = {
-  frame: { w: 1280, h: 720, marginX: 70, marginTop: 44, captionBand: 118 },
+  frame: { w: 1280, h: 720, marginX: 70, marginTop: 44, captionBand: 108 },
+  // The title sits inside the frame, top left; the scene is fitted underneath it.
+  title: { size: 30, y: 54, subSize: 17, subY: 82, band: 78, bandSub: 104, maxChars: 60, subMaxChars: 110 },
+  // Callouts are flat boxes that face the viewer, joined to their target by a line.
+  callout: { size: 16, lineHeight: 22, padX: 14, padY: 10, wrap: 28, charWidth: 7.9, gap: 60, maxChars: 110 },
 
   // World units. One unit is one grid square.
   slab: 0.3, // node thickness
@@ -25,6 +29,7 @@ export const tokens = {
   layerGap: 2.4, // vertical distance between layers
   bandGap: 1.3, // gap between layers when the scene is drawn flat
   arrow: { length: 0.24, half: 0.1 },
+  icon: { size: 0.46, inset: 0.15, gap: 0.1, stroke: 1.7 }, // icon square on a node's top face
   riserLabel: 0.42, // how far above the lower node a between-layers label sits
 
   // Text sizes in world units, so text scales with the scene.
@@ -47,7 +52,7 @@ export const tokens = {
   camera: { yaw: 22, pitch: 38, zoom: 1, yawRange: [-45, 45], pitchRange: [25, 70], zoomRange: [0.6, 2.2] },
 
   // Motion. Every move uses these and only these.
-  motion: { step: 750, drop: 0.7, pulse: 1700, dim: 0.2 },
+  motion: { step: 750, drop: 0.7, pulse: 1700, dim: 0.2, morph: 1400 },
 
   themes: {
     light: {

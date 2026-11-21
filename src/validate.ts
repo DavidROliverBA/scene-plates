@@ -3,8 +3,9 @@
 
 import { tokens as T } from './tokens';
 import { EDGE_KINDS, NODE_KINDS, type CameraSpec, type Spec, type View } from './spec';
-import { edgeId, type Box, type LEdge } from './layout';
-import { compile, frameBox } from './scene';
+import { edgeId, textArea, type Box, type LEdge } from './layout';
+import { builtinIcons, hasIcon } from './icons';
+import { calloutBox, compile, frameBox, projector } from './scene';
 
 type Rect = [number, number, number, number];
 const EPS = 0.02;
@@ -43,6 +44,8 @@ export function validate(spec: Spec, view?: View): string[] {
   // --- Structure ---------------------------------------------------------
   if (!spec || typeof spec !== 'object') return ['The spec must be a JSON object.'];
   if (!spec.title) bad('Add a "title".');
+  else if (spec.title.length > T.title.maxChars) bad(`The title is ${spec.title.length} characters; keep it to ${T.title.maxChars}.`);
+  if (spec.subtitle && spec.subtitle.length > T.title.subMaxChars) bad(`The subtitle is ${spec.subtitle.length} characters; keep it to ${T.title.subMaxChars}.`);
   if (!spec.description || spec.description.length < 20) bad('Add a "description" of at least 20 characters saying what the diagram shows; screen readers read it out.');
   if (!Array.isArray(spec.nodes) || !spec.nodes.length) return [...errs, 'Add at least one node.'];
 
@@ -61,6 +64,12 @@ export function validate(spec: Spec, view?: View): string[] {
     if (!Array.isArray(n.at) || n.at.length !== 2 || n.at.some((v) => typeof v !== 'number')) bad(`Node "${n.id}" needs "at": [column, row].`);
     if (n.size && (n.size.length !== 2 || n.size.some((v) => typeof v !== 'number' || v < 1))) bad(`Node "${n.id}" size must be [width, depth], each at least 1.`);
     if (n.kind && !NODE_KINDS.includes(n.kind)) bad(`Node "${n.id}" has kind "${n.kind}"; use one of ${NODE_KINDS.join(', ')}.`);
+    if (n.shape && n.shape !== 'box' && n.shape !== 'cylinder') bad(`Node "${n.id}" has shape "${n.shape}"; use box or cylinder.`);
+    if (n.icon && !hasIcon(n.icon)) {
+      bad(n.icon.includes(':')
+        ? `Node "${n.id}" uses icon "${n.icon}", which is not loaded. Load its icon pack (--icons on the command line, or the icons attribute on the page), or check the name.`
+        : `Node "${n.id}" uses icon "${n.icon}", which does not exist. Built-in icons: ${builtinIcons().join(', ')}.`);
+    }
     if (n.layer !== undefined && (!Number.isInteger(n.layer) || n.layer < 0)) bad(`Node "${n.id}" layer must be a whole number, 0 or more.`);
   }
   if (spec.view && spec.view !== 'iso' && spec.view !== 'flat') bad(`"view" must be "iso" or "flat".`);
@@ -94,6 +103,15 @@ export function validate(spec: Spec, view?: View): string[] {
     if (e.kind === 'loop' && !e.label) bad(`Loop edge "${id}" needs a label that states its cap, such as "max 3 tries".`);
     if (e.via && !['x', 'y', 'xy', 'yx'].includes(e.via)) bad(`Edge "${id}" via must be x, y, xy or yx.`);
   }
+  const calloutIds = new Set<string>();
+  for (const c of spec.callouts ?? []) {
+    claim(c.id, 'Callout');
+    calloutIds.add(c.id);
+    if (!c.text) bad(`Callout "${c.id}" needs "text".`);
+    else if (c.text.length > T.callout.maxChars) bad(`Callout "${c.id}" is ${c.text.length} characters; keep it to ${T.callout.maxChars}.`);
+    if (!nodeIds.has(c.on) && !groupIds.has(c.on)) bad(`Callout "${c.id}" points at "${c.on}", which is not a node or group.`);
+    if (c.side && !['up', 'down', 'left', 'right'].includes(c.side)) bad(`Callout "${c.id}" side must be up, down, left or right.`);
+  }
   const checkCam = (c: CameraSpec | undefined, where: string) => {
     if (!c) return;
     if (c.yaw !== undefined && !inRange(c.yaw, T.camera.yawRange)) bad(`${where}: yaw ${c.yaw} is outside ${T.camera.yawRange.join(' to ')}; labels stop being readable.`);
@@ -102,13 +120,14 @@ export function validate(spec: Spec, view?: View): string[] {
     for (const id of c.target ?? []) if (!nodeIds.has(id) && !groupIds.has(id)) bad(`${where}: camera target "${id}" is not a node or group.`);
   };
   checkCam(spec.camera, 'Camera');
-  const known = ['caption', 'show', 'hide', 'focus', 'pulse', 'camera'];
+  const known = ['caption', 'show', 'hide', 'focus', 'pulse', 'callout', 'camera'];
   (spec.steps ?? []).forEach((s, i) => {
     const where = `Step ${i + 1}`;
     for (const key of Object.keys(s)) if (!known.includes(key)) bad(`${where}: "${key}" is not a move. The moves are ${known.join(', ')}.`);
     if (s.caption && s.caption.length > T.caption.maxChars) bad(`${where}: caption is ${s.caption.length} characters; keep it to ${T.caption.maxChars}.`);
-    for (const id of [...(s.show ?? []), ...(s.hide ?? [])]) if (!ids.has(id)) bad(`${where}: "${id}" is not a node, group or edge.`);
+    for (const id of [...(s.show ?? []), ...(s.hide ?? [])]) if (calloutIds.has(id)) bad(`${where}: callouts are shown with "callout", not "show".`); else if (!ids.has(id)) bad(`${where}: "${id}" is not a node, group or edge.`);
     for (const id of s.focus ?? []) if (!ids.has(id)) bad(`${where}: focus "${id}" is not a node, group or edge.`);
+    for (const id of s.callout ?? []) if (!calloutIds.has(id)) bad(`${where}: callout "${id}" is not defined in "callouts".`);
     for (const id of s.pulse ?? []) if (!edgeIds.has(id)) bad(`${where}: pulse "${id}" is not an edge. Edge ids look like "from>to".`);
     checkCam(s.camera, where);
   });
@@ -121,9 +140,9 @@ export function validate(spec: Spec, view?: View): string[] {
     bad(`The scene is too big for one slide: labels would be about ${Math.round(scene.fit.scale * T.text.label)}px on a 1280px frame. Split it into two scenes or move nodes closer.`);
   }
   for (const n of model.nodes) {
-    const room = n.box.x1 - n.box.x0 - 0.24;
+    const room = textArea(n).room;
     const fits = (text: string, size: number) => text.length * T.charWidth * size <= room;
-    if (!fits(n.spec.label, T.text.label)) bad(`Label "${n.spec.label}" is too long for node "${n.id}" (${Math.floor(room / (T.charWidth * T.text.label))} characters fit). Shorten it or widen the node.`);
+    if (!fits(n.spec.label, T.text.label)) bad(`Label "${n.spec.label}" is too long for node "${n.id}" (${Math.floor(room / (T.charWidth * T.text.label))} characters fit). Shorten it or widen the node${n.spec.icon ? ' (an icon takes about 0.6 of the width; "size": [2.6, 1] is usual)' : ''}.`);
     if (n.spec.sub && !fits(n.spec.sub, T.text.sub)) bad(`Sub-label "${n.spec.sub}" is too long for node "${n.id}" (${Math.floor(room / (T.charWidth * T.text.sub))} characters fit).`);
   }
   for (let i = 0; i < model.nodes.length; i++) {
@@ -188,6 +207,35 @@ export function validate(spec: Spec, view?: View): string[] {
     if (st.cam.target || st.cam.zoom > 1.001) return;
     const [l, t, r, b] = frameBox(scene, st.cam), F = T.frame;
     if (l < 8 || t < 4 || r > F.w - 8 || b > F.h - F.captionBand + 34) bad(`Step ${i + 1}: at yaw ${st.cam.yaw}, pitch ${st.cam.pitch} the scene runs off the frame. Use a smaller camera move.`);
+  });
+
+  // Callouts: on a visible target, inside the frame, clear of boxes and of each other.
+  const cross = (o: number[], a: number[], b: number[]) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const quadHitsRect = (q: [number, number][], r: Rect) => {
+    // Separating-axis test between a four-sided shape and an upright rectangle.
+    if (Math.max(...q.map((p) => p[0])) <= r[0] || Math.min(...q.map((p) => p[0])) >= r[2] || Math.max(...q.map((p) => p[1])) <= r[1] || Math.min(...q.map((p) => p[1])) >= r[3]) return false;
+    const corners = [[r[0], r[1]], [r[2], r[1]], [r[2], r[3]], [r[0], r[3]]];
+    for (let i = 0; i < 4; i++) {
+      const [a, b] = [q[i], q[(i + 1) % 4]], inside = Math.sign(cross(a, b, q[(i + 2) % 4]));
+      if (corners.every((c) => Math.sign(cross(a, b, c)) === -inside)) return false;
+    }
+    return true;
+  };
+  scene.states.forEach((st, i) => {
+    const P = projector(scene, st.cam), F = T.frame, where = spec.steps?.length ? `Step ${i + 1}` : 'Scene';
+    const boxes = model.callouts.filter((c) => st.callout.has(c.id)).map((c) => ({ c, b: calloutBox(c, P(c.anchor)) }));
+    boxes.forEach(({ c, b }, k) => {
+      const targetNodes = model.byId.has(c.spec.on) ? [c.spec.on] : model.groups.find((g) => g.id === c.spec.on)?.nodes ?? [];
+      if (!targetNodes.some((id) => st.visible.has(id))) bad(`${where}: callout "${c.id}" points at "${c.spec.on}", which is not on screen yet.`);
+      const r: Rect = [b.x, b.y, b.x + b.w, b.y + b.h];
+      if (r[0] < 8 || r[1] < 6 || r[2] > F.w - 8 || r[3] > F.h - F.captionBand + 30) bad(`${where}: callout "${c.id}" falls outside the frame. Change its "side" or "gap".`);
+      for (const n of model.nodes) {
+        if (!st.visible.has(n.id)) continue;
+        const t = n.box, top = ([[t.x0, t.y0], [t.x1, t.y0], [t.x1, t.y1], [t.x0, t.y1]] as [number, number][]).map(([x, y]) => P([x, y, t.z1]));
+        if (quadHitsRect(top, [r[0] + 3, r[1] + 3, r[2] - 3, r[3] - 3])) bad(`${where}: callout "${c.id}" covers node "${n.id}". Change its "side" or "gap".`);
+      }
+      for (const o of boxes.slice(k + 1)) if (rectsOverlap(r, [o.b.x, o.b.y, o.b.x + o.b.w, o.b.y + o.b.h])) bad(`${where}: callouts "${c.id}" and "${o.c.id}" overlap.`);
+    });
   });
 
   // --- Steps, checked against what is on screen at that moment ------------

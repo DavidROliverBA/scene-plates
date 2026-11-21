@@ -1,45 +1,46 @@
 {
   "title": "AWS landscape: edge, network and data",
   "description": "A three-layer AWS landscape. At the edge, CloudFront and a web firewall filter traffic. In the VPC, a load balancer in a public subnet feeds an API and a worker in a private subnet. Underneath, Aurora, a read replica and S3 hold the data.",
-  "camera": { "yaw": 14, "pitch": 40 },
+  "camera": {"yaw": 14, "pitch": 40},
   "nodes": [
-    { "id": "users", "label": "PEOPLE", "sub": "anywhere", "kind": "quiet", "at": [0, 0], "layer": 2 },
-    { "id": "cdn", "label": "CLOUDFRONT", "sub": "caches near people", "at": [3.6, 0], "layer": 2 },
-    { "id": "waf", "label": "WAF", "sub": "filters bad traffic", "kind": "gate", "at": [7.6, 0], "layer": 2 },
-    { "id": "blocked", "label": "BLOCKED", "sub": "bots and attacks", "kind": "fail", "at": [11.2, 0], "layer": 2 },
-
-    { "id": "alb", "label": "LOAD BALANCER", "sub": "spreads requests", "at": [7.6, 0], "layer": 1 },
-    { "id": "api", "label": "API", "sub": "containers on ECS", "at": [3.6, 0], "layer": 1 },
-    { "id": "worker", "label": "WORKER", "sub": "slow jobs", "at": [0, 0], "layer": 1 },
-
-    { "id": "db", "label": "AURORA", "sub": "orders, accounts", "kind": "success", "at": [3.6, 0], "layer": 0 },
-    { "id": "replica", "label": "REPLICA", "sub": "read-only copy", "kind": "quiet", "at": [7.6, 0], "layer": 0 },
-    { "id": "files", "label": "S3", "sub": "reports, exports", "kind": "success", "at": [0, 0], "layer": 0 }
+    {"id": "users", "label": "PEOPLE", "sub": "anywhere", "kind": "quiet", "at": [0, 0], "layer": 2},
+    {"id": "cdn", "label": "CLOUDFRONT", "sub": "caches near people", "at": [3.6, 0], "layer": 2},
+    {"id": "waf", "label": "WAF", "sub": "filters bad traffic", "kind": "gate", "at": [7.6, 0], "layer": 2},
+    {"id": "blocked", "label": "BLOCKED", "sub": "bots and attacks", "kind": "fail", "at": [11.2, 0], "layer": 2},
+    {"id": "alb", "label": "LOAD BALANCER", "sub": "spreads requests", "at": [7.6, 0], "layer": 1},
+    {"id": "api", "label": "API", "sub": "containers on ECS", "at": [3.6, 0], "layer": 1},
+    {"id": "worker", "label": "WORKER", "sub": "slow jobs", "at": [0, 0], "layer": 1},
+    {"id": "db", "label": "AURORA", "sub": "orders, accounts", "kind": "success", "at": [3.6, 0], "layer": 0, "shape": "cylinder"},
+    {"id": "replica", "label": "REPLICA", "sub": "read-only copy", "kind": "quiet", "at": [7.6, 0], "layer": 0, "shape": "cylinder"},
+    {"id": "files", "label": "S3", "sub": "reports, exports", "kind": "success", "at": [0, 0], "layer": 0}
   ],
   "groups": [
-    { "id": "edge", "label": "EDGE", "contains": ["cdn", "waf", "blocked"] },
-    { "id": "public", "label": "PUBLIC SUBNET", "contains": ["alb"] },
-    { "id": "private", "label": "PRIVATE SUBNET", "contains": ["api", "worker"] },
-    { "id": "vpc", "label": "VPC", "contains": ["public", "private"] },
-    { "id": "data", "label": "DATA", "contains": ["db", "replica", "files"] }
+    {"id": "edge", "label": "EDGE", "contains": ["cdn", "waf", "blocked"]},
+    {"id": "public", "label": "PUBLIC SUBNET", "contains": ["alb"]},
+    {"id": "private", "label": "PRIVATE SUBNET", "contains": ["api", "worker"]},
+    {"id": "vpc", "label": "VPC", "contains": ["public", "private"]},
+    {"id": "data", "label": "DATA", "contains": ["db", "replica", "files"]}
   ],
   "edges": [
-    { "from": "users", "to": "cdn", "label": "https" },
-    { "from": "cdn", "to": "waf" },
-    { "from": "waf", "to": "blocked", "kind": "fail", "label": "deny" },
-    { "from": "waf", "to": "alb", "kind": "pass", "label": "allow" },
-    { "from": "alb", "to": "api" },
-    { "from": "api", "to": "worker", "label": "queue" },
-    { "from": "api", "to": "db", "label": "sql" },
-    { "from": "worker", "to": "files", "label": "write" },
-    { "from": "db", "to": "replica", "kind": "quiet", "label": "copies" }
+    {"from": "users", "to": "cdn", "label": "https"},
+    {"from": "cdn", "to": "waf"},
+    {"from": "waf", "to": "blocked", "kind": "fail", "label": "deny"},
+    {"from": "waf", "to": "alb", "kind": "pass", "label": "allow"},
+    {"from": "alb", "to": "api"},
+    {"from": "api", "to": "worker", "label": "queue"},
+    {"from": "api", "to": "db", "label": "sql"},
+    {"from": "worker", "to": "files", "label": "write"},
+    {"from": "db", "to": "replica", "kind": "quiet", "label": "copies"}
+  ],
+  "callouts": [
+    {"id": "gate", "text": "The only way in. Nothing below has a public address.", "on": "waf", "side": "up", "gap": 44}
   ],
   "steps": [
-    { "caption": "The edge: CloudFront serves people from a location near them.", "show": ["users", "cdn"], "pulse": ["users>cdn"] },
-    { "caption": "A web firewall filters every request. Bad traffic stops here.", "show": ["waf", "blocked"], "focus": ["waf", "blocked"], "pulse": ["cdn>waf", "waf>blocked"] },
-    { "caption": "Allowed traffic drops into the VPC through a public load balancer.", "show": ["public"], "focus": ["waf", "alb"], "pulse": ["waf>alb"] },
-    { "caption": "The API and its worker sit in a private subnet, out of reach of the internet.", "show": ["private"], "focus": ["alb", "api", "worker"], "pulse": ["alb>api", "api>worker"], "camera": { "yaw": 8, "pitch": 33 } },
-    { "caption": "The data layer sits underneath: Aurora, its replica, and S3.", "show": ["data"], "focus": ["api", "worker", "data"], "pulse": ["api>db", "worker>files", "db>replica"] },
-    { "caption": "Three layers, one way in, and data that only private code can touch.", "camera": { "yaw": 14, "pitch": 40 } }
+    {"caption": "The edge: CloudFront serves people from a location near them.", "show": ["users", "cdn"], "pulse": ["users>cdn"]},
+    {"caption": "A web firewall filters every request. Bad traffic stops here.", "show": ["waf", "blocked"], "focus": ["waf", "blocked"], "pulse": ["cdn>waf", "waf>blocked"], "callout": ["gate"]},
+    {"caption": "Allowed traffic drops into the VPC through a public load balancer.", "show": ["public"], "focus": ["waf", "alb"], "pulse": ["waf>alb"]},
+    {"caption": "The API and its worker sit in a private subnet, out of reach of the internet.", "show": ["private"], "focus": ["alb", "api", "worker"], "pulse": ["alb>api", "api>worker"], "camera": {"yaw": 8, "pitch": 33}},
+    {"caption": "The data layer sits underneath: Aurora, its replica, and S3.", "show": ["data"], "focus": ["api", "worker", "data"], "pulse": ["api>db", "worker>files", "db>replica"]},
+    {"caption": "Three layers, one way in, and data that only private code can touch.", "camera": {"yaw": 14, "pitch": 40}}
   ]
 }
