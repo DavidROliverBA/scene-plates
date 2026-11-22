@@ -2,7 +2,8 @@
 
 Every example, playing as a GIF. The specs are in
 [`examples`](../examples). To step through them yourself, with the
-3D / Isometric / Flat control, clone the repo and open `examples/deck.html`.
+3D / Isometric / Flat control, open the
+[live demo](https://davidroliverba.github.io/scene-plates/examples/deck.html).
 
 ## 01 A simple flowchart
 

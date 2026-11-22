@@ -32,8 +32,9 @@ bun src/cli.ts html examples/*.json -o deck.html   # a standalone deck
 open deck.html                                      # arrows, space or click
 ```
 
-[`examples/deck.html`](examples/deck.html) is that output, ready to open once
-you have cloned the repo (GitHub shows an HTML file as text, not as a page).
+**[Open the live demo](https://davidroliverba.github.io/scene-plates/examples/deck.html)**: twelve scenes you can step
+through, with the 3D / Isometric / Flat control. It is
+[`examples/deck.html`](examples/deck.html), the output of the commands above.
 
 - **[Tutorial](docs/tutorial.md)**: build your first scene in seven short parts.
 - **[Gallery](docs/gallery.md)**: every example playing as a GIF, viewable on GitHub.
