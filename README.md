@@ -14,7 +14,7 @@ camera and the animation. Because no one writes drawing code per diagram:
   graphics code, and an edit is a few changed lines.
 - **Bad diagrams are refused.** A checker rejects overlapping boxes, crossing
   lines, labels that do not fit, text too small to read, and loops with no cap.
-- **Nothing to install on the page.** One 41 KB script, no other libraries, no
+- **Nothing to install on the page.** One 47 KB script, no other libraries, no
   network. It also renders stills and GIFs from the command line.
 
 It draws 3D as SVG, not WebGL. That keeps text sharp at any size and lets the
